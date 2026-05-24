@@ -5,7 +5,7 @@ REM ============================================================
 REM Filenames - assumed to live in the same folder as this .bat.
 REM Edit only if you rename them.
 REM ============================================================
-set "BLEND_FILE=%~dp0iphones.blend"
+set "BLEND_FILE=%~dp0phones.blend"
 set "SCRIPT_FILE=%~dp0render_screens.py"
 REM ============================================================
 

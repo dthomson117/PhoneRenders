@@ -56,7 +56,7 @@ cp ~/my-app/android-screens/*.png screenshots/Android/
 
 # 3. Render. On Windows just double-click render.bat.
 #    On macOS / Linux, call Blender yourself:
-blender --background iphones.blend --python render_screens.py
+blender --background phones.blend --python render_screens.py
 ```
 
 Renders land in `renders/iOS/` and `renders/Android/`, one PNG per
@@ -171,7 +171,7 @@ Add, remove, or reorder angles freely - the script just iterates the list.
   image node in the screen material".
 
 Each scene in `scenes` must correspond to a Blender scene of the same name
-inside `iphones.blend`. You can rename / duplicate scenes inside Blender
+inside `phones.blend`. You can rename / duplicate scenes inside Blender
 to add e.g. an iPad or a second Android device - just mirror the rename
 in `render_settings.json`.
 
@@ -204,14 +204,14 @@ Example - low-sample preview pass with a custom settings file:
 ```bash
 RENDER_SETTINGS=./render_settings.preview.json \
 RENDER_SAMPLES=64 \
-blender --background iphones.blend --python render_screens.py
+blender --background phones.blend --python render_screens.py
 ```
 
 ## Repository layout
 
 ```
 .
-├── iphones.blend         # Phone models + scenes (Git LFS)
+├── phones.blend          # Phone models + scenes (Git LFS)
 ├── render_screens.py     # The Blender-side rendering script
 ├── render_settings.json  # All tweakable parameters
 ├── render.bat            # Windows launcher with Blender auto-discovery

@@ -17,7 +17,7 @@ Open an issue with:
 1. Fork the repo and create a topic branch.
 2. Keep changes focused - one PR per logical change.
 3. Test by rendering at least one screenshot per platform locally:
-   `blender --background iphones.blend --python render_screens.py`
+   `blender --background phones.blend --python render_screens.py`
 4. If you change `render_screens.py` defaults, please update the matching
    keys in `render_settings.json` and the README's settings table.
 5. Don't commit large output dumps under `renders/`. The `.gitignore`
@@ -25,7 +25,7 @@ Open an issue with:
 
 ## Adding a new phone model
 
-1. Add the model to a new (or existing) scene in `iphones.blend`.
+1. Add the model to a new (or existing) scene in `phones.blend`.
 2. Make sure the screen face has a material with an Image Texture node.
    Name or label that node uniquely (e.g. `ScreenTextureiPadMini`).
 3. Register the scene in `render_settings.json` under `scenes`:
