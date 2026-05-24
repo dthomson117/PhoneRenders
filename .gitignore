@@ -1,0 +1,44 @@
+# --- Blender ---------------------------------------------------------------
+# Auto-saved backup files Blender writes next to the main .blend.
+*.blend1
+*.blend2
+*.blend@
+
+# Blender autosave / temp output
+*.tmp
+*.bak
+
+# --- Python ----------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+
+# --- Renders ---------------------------------------------------------------
+# Ignore everything inside renders/ EXCEPT the small set of sample images
+# that we commit on purpose to show what the pipeline produces.
+renders/**
+!renders/
+!renders/iOS/
+!renders/Android/
+!renders/iOS/default_ios__*.png
+!renders/Android/default_android__*.png
+
+# --- Local-only artefacts --------------------------------------------------
+# Optional per-user override - drop a `render_settings.local.json` next to
+# `render_settings.json` and point RENDER_SETTINGS at it.
+render_settings.local.json
+
+# --- OS / editor -----------------------------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp
+*.swo

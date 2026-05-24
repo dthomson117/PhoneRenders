@@ -1,0 +1,38 @@
+{
+    "output_dir": "//renders/",
+    "resolution": { "x": 2160, "y": 3840 },
+    "resolution_percentage": 100,
+    "samples": 256,
+    "transparent_background": true,
+    "device": "GPU",
+    "use_auto_tile": false,
+    "tile_size": 1024,
+    "use_persistent_data": true,
+    "fit_margin": 1.08,
+    "default_lens_mm": 50,
+    "supported_extensions": [".png", ".jpg", ".jpeg", ".webp"],
+
+    "angles": [
+        { "name": "front",                  "tilt_deg": 15, "yaw_deg": 180, "distance_multiplier": 1.0 },
+        { "name": "threequarter_left",      "tilt_deg": 30, "yaw_deg": 215, "distance_multiplier": 1.0 },
+        { "name": "threequarter_right",     "tilt_deg": 30, "yaw_deg": 145, "distance_multiplier": 1.0 },
+        { "name": "threequarter_left_top",  "tilt_deg": 30, "yaw_deg": 325, "distance_multiplier": 1.0 },
+        { "name": "threequarter_right_top", "tilt_deg": 30, "yaw_deg":  35, "distance_multiplier": 1.0 },
+        { "name": "hero_top",               "tilt_deg":  0, "yaw_deg":   0, "distance_multiplier": 1.1 }
+    ],
+
+    "scenes": {
+        "iOS": {
+            "phone_object":    "iPhone 17 ProMax",
+            "screen_material": "17ProMax_Screen",
+            "screens_dir":     "//screenshots/iOS/",
+            "screen_node_id":  "ScreenTextureiOS"
+        },
+        "Android": {
+            "phone_object":    "Google Pixel 9 Pro XL",
+            "screen_material": "GP9XL_Screen",
+            "screens_dir":     "//screenshots/Android/",
+            "screen_node_id":  "ScreenTextureAndroid"
+        }
+    }
+}
