@@ -240,6 +240,106 @@ def find_image_node(phone, screen_material_name, screen_node_id=None):
     )
 
 
+def fit_screen_uvs(phone, image_node, screen_material):
+    """Normalise the screen face's UVs to the 0..1 range *shader-side*.
+
+    Looks at every polygon on ``phone`` that uses ``screen_material``, takes
+    the UV bounding box across all of their loops, and inserts (or refreshes)
+    a TexCoord -> Mapping pair wired into the screen Image Texture's Vector
+    input. The Mapping node remaps the screen's UV bbox onto (0,0)..(1,1),
+    so the screenshot fills the screen face regardless of how the mesh
+    happens to be unwrapped in the .blend.
+
+    Mutates only the screen material's node graph - never the mesh.
+    No-op when the UVs already fill 0..1.
+    """
+    mesh = phone.data
+    if not hasattr(mesh, "polygons") or mesh.uv_layers.active is None:
+        return
+
+    mat_idx = None
+    for i, slot in enumerate(phone.material_slots):
+        if slot.material is screen_material:
+            mat_idx = i
+            break
+    if mat_idx is None:
+        return
+
+    uv_data = mesh.uv_layers.active.data
+    us, vs = [], []
+    for poly in mesh.polygons:
+        if poly.material_index != mat_idx:
+            continue
+        for loop_idx in poly.loop_indices:
+            u, v = uv_data[loop_idx].uv
+            us.append(u)
+            vs.append(v)
+
+    if not us:
+        print(
+            f"[autofit] no faces on '{phone.name}' use material "
+            f"'{screen_material.name}' - skipping UV fit"
+        )
+        return
+
+    u_min, u_max = min(us), max(us)
+    v_min, v_max = min(vs), max(vs)
+    du, dv = u_max - u_min, v_max - v_min
+    if du <= 1e-6 or dv <= 1e-6:
+        return
+
+    nodes = screen_material.node_tree.nodes
+    links = screen_material.node_tree.links
+
+    AUTOFIT_COORD   = "_AutoFitTexCoord"
+    AUTOFIT_MAPPING = "_AutoFitMapping"
+
+    tol = 1e-4
+    already_unit = (
+        abs(u_min) < tol and abs(u_max - 1) < tol
+        and abs(v_min) < tol and abs(v_max - 1) < tol
+    )
+    if already_unit:
+        # Tear down any previous auto-fit nodes so we don't double-correct.
+        for name in (AUTOFIT_MAPPING, AUTOFIT_COORD):
+            n = nodes.get(name)
+            if n is not None:
+                nodes.remove(n)
+        return
+
+    coord_node = nodes.get(AUTOFIT_COORD)
+    if coord_node is None:
+        coord_node = nodes.new("ShaderNodeTexCoord")
+        coord_node.name  = AUTOFIT_COORD
+        coord_node.label = AUTOFIT_COORD
+        coord_node.location = (image_node.location.x - 620, image_node.location.y)
+
+    mapping_node = nodes.get(AUTOFIT_MAPPING)
+    if mapping_node is None:
+        mapping_node = nodes.new("ShaderNodeMapping")
+        mapping_node.name  = AUTOFIT_MAPPING
+        mapping_node.label = AUTOFIT_MAPPING
+        mapping_node.location = (image_node.location.x - 360, image_node.location.y)
+
+    for link in list(links):
+        if (link.to_node is mapping_node and link.to_socket.name == "Vector") \
+                or (link.to_node is image_node and link.to_socket.name == "Vector"):
+            links.remove(link)
+    links.new(coord_node.outputs["UV"], mapping_node.inputs["Vector"])
+    links.new(mapping_node.outputs["Vector"], image_node.inputs["Vector"])
+
+    mapping_node.vector_type = 'POINT'
+    mapping_node.inputs["Location"].default_value = (-u_min / du, -v_min / dv, 0.0)
+    mapping_node.inputs["Rotation"].default_value = (0.0, 0.0, 0.0)
+    mapping_node.inputs["Scale"].default_value    = (1.0 / du, 1.0 / dv, 1.0)
+
+    print(
+        f"[autofit] '{phone.name}' screen UV bbox "
+        f"({u_min:.3f}..{u_max:.3f}, {v_min:.3f}..{v_max:.3f}) "
+        "-> normalised to 0..1 via Mapping node"
+    )
+
+
 def scan_screenshots(screens_dir_path):
     """Return a sorted list of image filepaths in the directory."""
     abs_dir = bpy.path.abspath(screens_dir_path)
@@ -346,6 +446,7 @@ def render_scene(scene_name, cfg):
     screen_node_id = cfg.get("screen_node_id", SCREEN_NODE_ID)
     image_node, image_mat = find_image_node(phone, cfg["screen_material"], screen_node_id)
     print(f"Image Texture node: '{image_node.name}' in material '{image_mat.name}'")
+    fit_screen_uvs(phone, image_node, image_mat)
 
     screenshot_files = scan_screenshots(cfg["screens_dir"])
     if not screenshot_files:
@@ -475,7 +576,32 @@ def render_scene(scene_name, cfg):
 
 
 # --- main loop ------------------------------------------------------------
-for scene_name, cfg in SCENE_CONFIGS.items():
+def selected_scene_configs():
+    """Filter SCENE_CONFIGS via the RENDER_PLATFORMS env var (case-insensitive,
+    comma-separated). Unset/empty -> render everything."""
+    requested = os.environ.get("RENDER_PLATFORMS", "").strip()
+    if not requested:
+        return SCENE_CONFIGS
+
+    wanted = {name.strip().lower() for name in requested.split(",") if name.strip()}
+    selected = {
+        scene_name: cfg
+        for scene_name, cfg in SCENE_CONFIGS.items()
+        if scene_name.lower() in wanted
+    }
+
+    if not selected:
+        raise RuntimeError(
+            f"RENDER_PLATFORMS={requested!r} matched no scenes. "
+            f"Valid options: {', '.join(SCENE_CONFIGS)}"
+        )
+    return selected
+
+
+scenes_to_render = selected_scene_configs()
+print(f"Rendering platforms: {', '.join(scenes_to_render)}")
+
+for scene_name, cfg in scenes_to_render.items():
     try:
         render_scene(scene_name, cfg)
     except Exception as e:

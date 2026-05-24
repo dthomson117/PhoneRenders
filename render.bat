@@ -9,6 +9,25 @@ set "BLEND_FILE=%~dp0phones.blend"
 set "SCRIPT_FILE=%~dp0render_screens.py"
 REM ============================================================
 
+REM ============================================================
+REM Optional platform filter (positional arg 1):
+REM   render.bat              -> render iOS + Android (default)
+REM   render.bat ios          -> render iOS only
+REM   render.bat android      -> render Android only
+REM   render.bat both | all   -> explicit "render everything"
+REM Read by render_screens.py via the RENDER_PLATFORMS env var.
+REM ============================================================
+set "PLATFORM_ARG=%~1"
+set "RENDER_PLATFORMS="
+if not defined PLATFORM_ARG goto :platform_done
+if /i "%PLATFORM_ARG%"=="ios"     ( set "RENDER_PLATFORMS=iOS"     & goto :platform_done )
+if /i "%PLATFORM_ARG%"=="android" ( set "RENDER_PLATFORMS=Android" & goto :platform_done )
+if /i "%PLATFORM_ARG%"=="both"    goto :platform_done
+if /i "%PLATFORM_ARG%"=="all"     goto :platform_done
+echo ERROR: Unknown platform "%PLATFORM_ARG%". Use: ios, android, both, or no argument.
+exit /b 1
+:platform_done
+
 REM 1. Manual override via env var: set BLENDER_EXE=C:\path\to\blender.exe
 if defined BLENDER_EXE (
     if exist "!BLENDER_EXE!" goto :found
@@ -82,6 +101,11 @@ exit /b 0
 echo Blender:    !BLENDER_EXE!
 echo Blend file: !BLEND_FILE!
 echo Script:     !SCRIPT_FILE!
+if defined RENDER_PLATFORMS (
+    echo Platforms:  !RENDER_PLATFORMS!
+) else (
+    echo Platforms:  iOS, Android ^(all^)
+)
 echo.
 
 if not exist "!BLEND_FILE!" (
