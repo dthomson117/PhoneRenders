@@ -45,7 +45,7 @@ Both are rendered at **2160 × 3840** (4K portrait) with a transparent backgroun
 ```bash
 # 1. Clone (Git LFS pulls the .blend + .exr automatically)
 git lfs install
-git clone https://github.com/<your-username>/AppStoreImages.git
+git clone https://github.com/dthomson117/AppStoreImages.git
 cd AppStoreImages
 
 # 2. Drop screenshots into the right folder.
