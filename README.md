@@ -1,4 +1,4 @@
-# AppStoreImages
+# PhoneRenders
 
 Batch-render beautiful 3D phone mockups for the App Store / Play Store from
 flat screenshots, using Blender + a single Python script.
@@ -45,8 +45,8 @@ Both are rendered at **2160 × 3840** (4K portrait) with a transparent backgroun
 ```bash
 # 1. Clone (Git LFS pulls the .blend + .exr automatically)
 git lfs install
-git clone https://github.com/dthomson117/AppStoreImages.git
-cd AppStoreImages
+git clone https://github.com/dthomson117/PhoneRenders.git
+cd PhoneRenders
 
 # 2. Drop screenshots into the right folder.
 #    Anything .png / .jpg / .jpeg / .webp works.
