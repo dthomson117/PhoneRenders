@@ -2,8 +2,21 @@ import bpy
 import os
 import json
 import math
+import sys
 from mathutils import Vector, Matrix
 from bpy_extras.object_utils import world_to_camera_view
+
+
+def log(message=""):
+    """Write to stderr with an immediate flush.
+
+    Blender buffers Python stdout in --background mode, so important script
+    messages (settings loaded, render config banner, "Rendering ..." lines)
+    can sit hidden until the run is nearly over. Routing them through stderr
+    with flush=True puts them in the same stream as Blender's own
+    warnings/errors and makes them appear in real time."""
+    print(message, file=sys.stderr, flush=True)
+
 
 # --- SETTINGS LOADER ------------------------------------------------------
 # All tweakable values live in `render_settings.json` next to this script
@@ -14,7 +27,7 @@ SETTINGS_FILENAME = "render_settings.json"
 
 DEFAULT_SETTINGS = {
     "output_dir": "//renders/",
-    "resolution": {"x": 2160, "y": 3840},
+    "resolution": {"x": 1440, "y": 2560},
     "resolution_percentage": 100,
     "samples": 256,
     "transparent_background": True,
@@ -71,13 +84,13 @@ def load_settings():
             try:
                 with open(path, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                print(f"Loaded settings from: {path}")
+                log(f"Loaded settings from: {path}")
                 merged = dict(DEFAULT_SETTINGS)
                 merged.update(data)
                 return merged
             except (OSError, json.JSONDecodeError) as exc:
-                print(f"[warn] could not parse settings at {path}: {exc}")
-    print(f"[warn] {SETTINGS_FILENAME} not found - using built-in defaults.")
+                log(f"[warn] could not parse settings at {path}: {exc}")
+    log(f"[warn] {SETTINGS_FILENAME} not found - using built-in defaults.")
     return dict(DEFAULT_SETTINGS)
 
 
@@ -109,6 +122,7 @@ SCREEN_NORMAL = Vector(( 0,  0,  1))
 UI_UP         = Vector(( 0, -1,  0))
 # --------------------------------------------------------------------------
 
+
 def setup_gpu():
     prefs = bpy.context.preferences.addons['cycles'].preferences
     for dev_type in ('OPTIX', 'CUDA', 'HIP', 'ONEAPI', 'METAL'):
@@ -123,13 +137,73 @@ def setup_gpu():
         device.use = (device.type != 'CPU')
         if device.use:
             enabled.append(f"{device.type}: {device.name}")
-    print(f"Cycles compute_device_type = {prefs.compute_device_type}")
+    log(f"Cycles compute_device_type = {prefs.compute_device_type}")
     for line in enabled:
-        print(f"  - {line}")
+        log(f"  - {line}")
     if not enabled:
-        print("  (no GPU detected - falling back to CPU)")
+        log("  (no GPU detected - falling back to CPU)")
 
 setup_gpu()
+
+
+def log_render_config(scene):
+    """Print a prominent banner of what the next render(s) will actually use.
+
+    Reads back the configured values from the scene rather than the settings
+    file, so we report what Blender will really do - not what we asked for."""
+    engine = scene.render.engine
+    res_x = int(scene.render.resolution_x * scene.render.resolution_percentage / 100)
+    res_y = int(scene.render.resolution_y * scene.render.resolution_percentage / 100)
+
+    log("-" * 60)
+    log(f"Render engine:    {engine}")
+    log(f"Resolution:       {res_x} x {res_y}")
+    log(f"Film transparent: {scene.render.film_transparent}")
+
+    if engine == 'CYCLES':
+        prefs = bpy.context.preferences.addons['cycles'].preferences
+        active_gpus = [
+            f"{d.type}: {d.name}" for d in prefs.devices
+            if d.use and d.type != 'CPU'
+        ]
+        cdt = prefs.compute_device_type
+        device_label = scene.cycles.device
+        if device_label == 'GPU' and active_gpus:
+            device_label = f"GPU ({cdt})"
+        elif device_label == 'GPU':
+            device_label = f"GPU ({cdt}) - NO ACTIVE DEVICES, will fall back to CPU"
+        log(f"Device:           {device_label}")
+        for g in active_gpus:
+            log(f"  - {g}")
+        log(f"Samples (max):    {scene.cycles.samples}")
+        log(
+            f"Adaptive:         threshold={scene.cycles.adaptive_threshold} "
+            f"min_samples={scene.cycles.adaptive_min_samples}"
+        )
+        if scene.cycles.use_denoising:
+            denoiser = getattr(scene.cycles, 'denoiser', '?')
+            quality = getattr(scene.cycles, 'denoising_quality', '?')
+            prefilter = getattr(scene.cycles, 'denoising_prefilter', '?')
+            passes = getattr(scene.cycles, 'denoising_input_passes', '?')
+            use_gpu = getattr(scene.cycles, 'denoising_use_gpu', False)
+            log(
+                f"Denoiser:         {denoiser} "
+                f"(quality={quality}, prefilter={prefilter}, "
+                f"passes={passes}, gpu={use_gpu})"
+            )
+        else:
+            log("Denoiser:         OFF")
+        try:
+            log(
+                f"Tiling:           auto_tile={scene.cycles.use_auto_tile} "
+                f"tile_size={scene.cycles.tile_size}"
+            )
+        except AttributeError:
+            pass
+        log(f"Persistent data:  {scene.render.use_persistent_data}")
+    elif engine in ('BLENDER_EEVEE_NEXT', 'BLENDER_EEVEE'):
+        log(f"Samples:          {scene.eevee.taa_render_samples}")
+    log("-" * 60)
 
 
 def _image_file_exists(img):
@@ -167,7 +241,7 @@ def replace_missing_image_nodes(scene):
                     if fallback is None:
                         fallback = _missing_image_fallback()
                     missing_path = bpy.path.abspath(node.image.filepath)
-                    print(
+                    log(
                         f"[warn] replacing missing image on '{owner_name}' "
                         f"node '{node.name}': {missing_path}"
                     )
@@ -213,7 +287,7 @@ def find_image_node(phone, screen_material_name, screen_node_id=None):
                 if node.bl_idname != "ShaderNodeTexImage":
                     continue
                 if node.name.strip().lower() == target or node.label.strip().lower() == target:
-                    print(
+                    log(
                         f"Matched screen node by id '{screen_node_id}': "
                         f"name='{node.name}', label='{node.label}' in '{mat.name}'"
                     )
@@ -226,12 +300,12 @@ def find_image_node(phone, screen_material_name, screen_node_id=None):
             if node.bl_idname == "ShaderNodeTexImage":
                 return node, mat
 
-    print("No Image Texture node found. Inspected:")
+    log("No Image Texture node found. Inspected:")
     for mat in candidate_mats:
-        print(f"- {mat.name}")
+        log(f"- {mat.name}")
         if mat.use_nodes:
             for n in mat.node_tree.nodes:
-                print(f"    {n.name} ({n.bl_idname})  label='{n.label}'")
+                log(f"    {n.name} ({n.bl_idname})  label='{n.label}'")
     raise RuntimeError(
         f"No Image Texture node found in material '{screen_material_name}' or other "
         f"materials on '{phone.name}'. Add one to the screen material, set its name "
@@ -240,7 +314,82 @@ def find_image_node(phone, screen_material_name, screen_node_id=None):
     )
 
 
-def fit_screen_uvs(phone, image_node, screen_material):
+AUTOFIT_COORD_NODE   = "_AutoFitTexCoord"
+AUTOFIT_MAPPING_NODE = "_AutoFitMapping"
+
+
+def _collect_screen_uvs(phone, screen_material):
+    """Return ``(us, vs, mat_idx, layer_name)`` for every loop UV on
+    ``phone`` whose face uses ``screen_material``.
+
+    Goes through ``bmesh`` rather than the ``mesh.uv_layers[…].data`` or
+    ``mesh.attributes[…].data`` collections because both of those paths
+    have historically come back empty on certain meshes (Blender 4.1+ moved
+    UVs into the attribute system, and the legacy shim can return a
+    zero-length collection in Blender 5.x even when the mesh clearly has
+    UVs). ``bmesh.loops.layers.uv`` has been the stable, canonical way to
+    read UVs since Blender 2.6 and works on every version.
+
+    Returns ``(None, None, None, None)`` if no matching material slot
+    exists, ``([], [], mat_idx, layer_name)`` if the material has no faces,
+    or ``([], [], mat_idx, None)`` if the mesh has no UV layer at all.
+    """
+    import bmesh
+
+    mat_idx = None
+    for i, slot in enumerate(phone.material_slots):
+        if slot.material is screen_material:
+            mat_idx = i
+            break
+    if mat_idx is None:
+        return None, None, None, None
+
+    mesh = phone.data
+    bm = bmesh.new()
+    try:
+        bm.from_mesh(mesh)
+        uv_layer = bm.loops.layers.uv.active
+        if uv_layer is None:
+            uv_keys = list(bm.loops.layers.uv.keys())
+            if uv_keys:
+                uv_layer = bm.loops.layers.uv[uv_keys[0]]
+        if uv_layer is None:
+            return [], [], mat_idx, None
+
+        us, vs = [], []
+        for face in bm.faces:
+            if face.material_index != mat_idx:
+                continue
+            for loop in face.loops:
+                u, v = loop[uv_layer].uv
+                us.append(u)
+                vs.append(v)
+        return us, vs, mat_idx, uv_layer.name
+    finally:
+        bm.free()
+
+
+def disable_screen_uv_autofit(image_node, screen_material):
+    """Honour the .blend's hand-laid UVs verbatim instead of normalising them.
+
+    Tears down any TexCoord/Mapping nodes left over from a previous
+    ``fit_screen_uvs`` run so the Image Texture node falls back to the mesh's
+    active UV map untouched, and switches the texture's extension mode to
+    'CLIP' so UVs that fall outside 0..1 (e.g. an island scaled up to inset
+    the screenshot inside a curved bezel) render as transparent rather than
+    tiling the edge pixels."""
+    nodes = screen_material.node_tree.nodes
+    for name in (AUTOFIT_MAPPING_NODE, AUTOFIT_COORD_NODE):
+        node = nodes.get(name)
+        if node is not None:
+            nodes.remove(node)
+    try:
+        image_node.extension = 'CLIP'
+    except (AttributeError, TypeError):
+        pass
+
+
+def fit_screen_uvs(phone, image_node, screen_material, inset=0.0):
     """Normalise the screen face's UVs to the 0..1 range *shader-side*.
 
     Looks at every polygon on ``phone`` that uses ``screen_material``, takes
@@ -250,35 +399,29 @@ def fit_screen_uvs(phone, image_node, screen_material):
     so the screenshot fills the screen face regardless of how the mesh
     happens to be unwrapped in the .blend.
 
+    ``inset`` (0..0.5) shrinks the screenshot inward by that fraction on
+    every side, leaving transparent margin between the screenshot and the
+    screen face's edge. Useful when a phone mesh has rounded display corners
+    that bite into status-bar content. Implemented by oversampling: the
+    Mapping node samples *outside* 0..1, and the Image Texture is forced to
+    'CLIP' so the over-sampled area returns transparent rather than tiling.
+
     Mutates only the screen material's node graph - never the mesh.
-    No-op when the UVs already fill 0..1.
+    No-op when the UVs already fill 0..1 *and* no inset is requested.
     """
-    mesh = phone.data
-    if not hasattr(mesh, "polygons") or mesh.uv_layers.active is None:
+    if not hasattr(phone.data, "polygons"):
         return
 
-    mat_idx = None
-    for i, slot in enumerate(phone.material_slots):
-        if slot.material is screen_material:
-            mat_idx = i
-            break
+    us, vs, mat_idx, layer_name = _collect_screen_uvs(phone, screen_material)
     if mat_idx is None:
         return
-
-    uv_data = mesh.uv_layers.active.data
-    us, vs = [], []
-    for poly in mesh.polygons:
-        if poly.material_index != mat_idx:
-            continue
-        for loop_idx in poly.loop_indices:
-            u, v = uv_data[loop_idx].uv
-            us.append(u)
-            vs.append(v)
-
+    if layer_name is None:
+        log(f"[autofit] '{phone.name}' has no UV layer - skipping UV fit")
+        return
     if not us:
-        print(
+        log(
             f"[autofit] no faces on '{phone.name}' use material "
-            f"'{screen_material.name}' - skipping UV fit"
+            f"'{screen_material.name}' (layer: {layer_name!r}) - skipping UV fit"
         )
         return
 
@@ -288,37 +431,40 @@ def fit_screen_uvs(phone, image_node, screen_material):
     if du <= 1e-6 or dv <= 1e-6:
         return
 
+    inset = max(0.0, min(0.49, float(inset)))
+
     nodes = screen_material.node_tree.nodes
     links = screen_material.node_tree.links
-
-    AUTOFIT_COORD   = "_AutoFitTexCoord"
-    AUTOFIT_MAPPING = "_AutoFitMapping"
 
     tol = 1e-4
     already_unit = (
         abs(u_min) < tol and abs(u_max - 1) < tol
         and abs(v_min) < tol and abs(v_max - 1) < tol
     )
-    if already_unit:
+    if already_unit and inset == 0.0:
         # Tear down any previous auto-fit nodes so we don't double-correct.
-        for name in (AUTOFIT_MAPPING, AUTOFIT_COORD):
+        for name in (AUTOFIT_MAPPING_NODE, AUTOFIT_COORD_NODE):
             n = nodes.get(name)
             if n is not None:
                 nodes.remove(n)
+        try:
+            image_node.extension = 'REPEAT'
+        except (AttributeError, TypeError):
+            pass
         return
 
-    coord_node = nodes.get(AUTOFIT_COORD)
+    coord_node = nodes.get(AUTOFIT_COORD_NODE)
     if coord_node is None:
         coord_node = nodes.new("ShaderNodeTexCoord")
-        coord_node.name  = AUTOFIT_COORD
-        coord_node.label = AUTOFIT_COORD
+        coord_node.name  = AUTOFIT_COORD_NODE
+        coord_node.label = AUTOFIT_COORD_NODE
         coord_node.location = (image_node.location.x - 620, image_node.location.y)
 
-    mapping_node = nodes.get(AUTOFIT_MAPPING)
+    mapping_node = nodes.get(AUTOFIT_MAPPING_NODE)
     if mapping_node is None:
         mapping_node = nodes.new("ShaderNodeMapping")
-        mapping_node.name  = AUTOFIT_MAPPING
-        mapping_node.label = AUTOFIT_MAPPING
+        mapping_node.name  = AUTOFIT_MAPPING_NODE
+        mapping_node.label = AUTOFIT_MAPPING_NODE
         mapping_node.location = (image_node.location.x - 360, image_node.location.y)
 
     for link in list(links):
@@ -328,15 +474,45 @@ def fit_screen_uvs(phone, image_node, screen_material):
     links.new(coord_node.outputs["UV"], mapping_node.inputs["Vector"])
     links.new(mapping_node.outputs["Vector"], image_node.inputs["Vector"])
 
+    # Compose two transforms into one Mapping node:
+    #   normalise:  norm  = (UV - min) / d                  (UV bbox -> 0..1)
+    #   inset:      tex   = (1 + 2*inset) * norm - inset    (shrinks content
+    #                                                       toward centre by
+    #                                                       `inset` on each
+    #                                                       side; outside 0..1
+    #                                                       is sampled and
+    #                                                       clipped to alpha=0)
+    #
+    # Blender's shader Mapping node applies location after scale:
+    #   tex = UV * Scale + Location
+    # so Location must be in scaled texture-coordinate units.
+    oversample = 1.0 + 2.0 * inset
     mapping_node.vector_type = 'POINT'
-    mapping_node.inputs["Location"].default_value = (-u_min / du, -v_min / dv, 0.0)
+    mapping_node.inputs["Location"].default_value = (
+        -u_min * oversample / du - inset,
+        -v_min * oversample / dv - inset,
+        0.0,
+    )
     mapping_node.inputs["Rotation"].default_value = (0.0, 0.0, 0.0)
-    mapping_node.inputs["Scale"].default_value    = (1.0 / du, 1.0 / dv, 1.0)
+    mapping_node.inputs["Scale"].default_value = (
+        oversample / du,
+        oversample / dv,
+        1.0,
+    )
 
-    print(
+    # When inset > 0 the screen face samples outside 0..1; CLIP makes the
+    # over-sampled fringe transparent so the bezel/back-of-glass material
+    # behind the screen face shows through cleanly.
+    if inset > 0.0:
+        try:
+            image_node.extension = 'CLIP'
+        except (AttributeError, TypeError):
+            pass
+
+    log(
         f"[autofit] '{phone.name}' screen UV bbox "
         f"({u_min:.3f}..{u_max:.3f}, {v_min:.3f}..{v_max:.3f}) "
-        "-> normalised to 0..1 via Mapping node"
+        f"-> normalised to 0..1 via Mapping node (inset={inset:.3f})"
     )
 
 
@@ -429,12 +605,12 @@ def build_cameras(scene, phone):
 
 def render_scene(scene_name, cfg):
     if scene_name not in bpy.data.scenes:
-        print(f"[skip] scene '{scene_name}' not found in this .blend")
+        log(f"[skip] scene '{scene_name}' not found in this .blend")
         return
 
     scene = bpy.data.scenes[scene_name]
     bpy.context.window.scene = scene
-    print(f"\n=== Rendering scene: {scene_name} ===")
+    log(f"\n=== Rendering scene: {scene_name} ===")
     replace_missing_image_nodes(scene)
 
     phone = scene.objects.get(cfg["phone_object"])
@@ -445,14 +621,23 @@ def render_scene(scene_name, cfg):
 
     screen_node_id = cfg.get("screen_node_id", SCREEN_NODE_ID)
     image_node, image_mat = find_image_node(phone, cfg["screen_material"], screen_node_id)
-    print(f"Image Texture node: '{image_node.name}' in material '{image_mat.name}'")
-    fit_screen_uvs(phone, image_node, image_mat)
+    log(f"Image Texture node: '{image_node.name}' in material '{image_mat.name}'")
+
+    if cfg.get("autofit_screen_uvs", True):
+        screen_inset = float(cfg.get("screen_inset", 0.0))
+        fit_screen_uvs(phone, image_node, image_mat, inset=screen_inset)
+    else:
+        disable_screen_uv_autofit(image_node, image_mat)
+        log(
+            f"[uv] autofit disabled for '{scene_name}': using mesh UVs as-is, "
+            "Image Texture extension set to CLIP"
+        )
 
     screenshot_files = scan_screenshots(cfg["screens_dir"])
     if not screenshot_files:
-        print(f"[skip] no screenshots found in {cfg['screens_dir']}")
+        log(f"[skip] no screenshots found in {cfg['screens_dir']}")
         return
-    print(f"Found {len(screenshot_files)} screenshot(s) in {cfg['screens_dir']}")
+    log(f"Found {len(screenshot_files)} screenshot(s) in {cfg['screens_dir']}")
 
     scene.render.resolution_x = RES_X
     scene.render.resolution_y = RES_Y
@@ -469,7 +654,7 @@ def render_scene(scene_name, cfg):
         # USB port lip, chamfered edges) from being undersampled and then
         # smeared into asterisk-shaped artifacts by the denoiser.
         scene.cycles.adaptive_threshold = 0.01
-        scene.cycles.adaptive_min_samples = 64
+        scene.cycles.adaptive_min_samples = 16
         scene.cycles.use_denoising = True
         # Disabled: clipping indirect light tends to flatten the highlights on
         # chamfered phone edges and the screen glass without much speed win.
@@ -538,6 +723,8 @@ def render_scene(scene_name, cfg):
 
     cams = build_cameras(scene, phone)
 
+    log_render_config(scene)
+
     out_dir = os.path.join(bpy.path.abspath(OUTPUT_DIR), scene_name)
     os.makedirs(out_dir, exist_ok=True)
 
@@ -563,7 +750,7 @@ def render_scene(scene_name, cfg):
                 out_dir, f"{safe_screen}__{angle_name}.png"
             )
             bpy.context.view_layer.update()
-            print(f"Rendering {scene.render.filepath}")
+            log(f"Rendering {scene.render.filepath}")
             bpy.ops.render.render(write_still=True)
 
     # Optional: keep loaded images cached in the file. Comment out the next
@@ -599,12 +786,12 @@ def selected_scene_configs():
 
 
 scenes_to_render = selected_scene_configs()
-print(f"Rendering platforms: {', '.join(scenes_to_render)}")
+log(f"Rendering platforms: {', '.join(scenes_to_render)}")
 
 for scene_name, cfg in scenes_to_render.items():
     try:
         render_scene(scene_name, cfg)
     except Exception as e:
-        print(f"[error] scene '{scene_name}' failed: {e}")
+        log(f"[error] scene '{scene_name}' failed: {e}")
 
-print("\nAll scenes done.")
+log("\nAll scenes done.")

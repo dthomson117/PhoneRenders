@@ -265,6 +265,24 @@ Add, remove, or reorder angles freely - the script just iterates the list.
   screen Image Texture node so the script never has to guess which image
   node is the screen. If you skip it, the script falls back to "the first
   image node in the screen material".
+- `autofit_screen_uvs` *(optional, default `true`)* - when `true`, the
+  script auto-normalises the screen face's UV bbox to fill 0..1 via a
+  generated Mapping node, so the screenshot fills the whole face regardless
+  of how the mesh is unwrapped. Set to `false` to honour the .blend's
+  hand-laid UVs verbatim - useful when the screen mesh has rounded corners
+  cutting into UI content (e.g. status-bar icons disappearing under a
+  curved bezel) and you want to inset the screenshot by scaling the UV
+  island up in the UV editor. When disabled, the Image Texture node is
+  also forced to `Extension: Clip` so the area outside 0..1 renders
+  transparent instead of tiling the edge pixels.
+- `screen_inset` *(optional, default `0.0`)* - fraction (0..0.49) by which
+  to shrink the screenshot inward on every side when autofit is enabled.
+  Use this when a phone mesh has rounded display corners that crop status-
+  bar icons or other edge content - e.g. `0.02` leaves a 2% transparent
+  margin around the screenshot so UI elements clear the corner curve. The
+  Image Texture node is automatically switched to `Extension: Clip` when
+  `screen_inset > 0` so the margin renders transparent. Ignored when
+  `autofit_screen_uvs` is `false` (use the UV editor in that case).
 
 Each scene in `scenes` must correspond to a Blender scene of the same name
 inside `phones.blend`. You can rename / duplicate scenes inside Blender

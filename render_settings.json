@@ -1,11 +1,11 @@
 {
     "output_dir": "//renders/",
-    "resolution": { "x": 2160, "y": 3840 },
+    "resolution": { "x": 1440, "y": 2560 },
     "resolution_percentage": 100,
     "samples": 256,
     "transparent_background": true,
     "device": "GPU",
-    "use_auto_tile": false,
+    "use_auto_tile": true,
     "tile_size": 1024,
     "use_persistent_data": true,
     "fit_margin": 1.08,
