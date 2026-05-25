@@ -38,6 +38,18 @@ DEFAULT_SETTINGS = {
     "fit_margin": 1.08,
     "default_lens_mm": 50,
     "supported_extensions": [".png", ".jpg", ".jpeg", ".webp"],
+    "view_transform": "Standard",
+    "view_look": "None",
+    "view_exposure": 0.0,
+    "view_gamma": 1.0,
+    "shadow_catcher": False,
+    "shadow_catcher_size_multiplier": 8.0,
+    "shadow_catcher_z_offset": 0.0,
+    "key_light": False,
+    "key_light_strength": 4.0,
+    "key_light_elevation_deg": 45.0,
+    "key_light_angle_deg": 3.0,
+    "key_light_color": [1.0, 1.0, 1.0],
     "angles": [
         {"name": "front",                  "tilt_deg": 15, "yaw_deg": 180, "distance_multiplier": 1.0},
         {"name": "threequarter_left",      "tilt_deg": 30, "yaw_deg": 215, "distance_multiplier": 1.0},
@@ -111,6 +123,19 @@ DEVICE          = str(SETTINGS.get("device", "GPU")).upper()
 USE_AUTO_TILE   = bool(SETTINGS.get("use_auto_tile", True))
 TILE_SIZE       = int(SETTINGS.get("tile_size", 1024))
 USE_PERSISTENT  = bool(SETTINGS.get("use_persistent_data", True))
+VIEW_TRANSFORM        = str(SETTINGS.get("view_transform", "Standard"))
+VIEW_LOOK             = str(SETTINGS.get("view_look", "None"))
+VIEW_EXPOSURE         = float(SETTINGS.get("view_exposure", 0.0))
+VIEW_GAMMA            = float(SETTINGS.get("view_gamma", 1.0))
+SHADOW_CATCHER        = bool(SETTINGS.get("shadow_catcher", False))
+SHADOW_CATCHER_SIZE   = float(SETTINGS.get("shadow_catcher_size_multiplier", 8.0))
+SHADOW_CATCHER_Z      = float(SETTINGS.get("shadow_catcher_z_offset", 0.0))
+KEY_LIGHT             = bool(SETTINGS.get("key_light", False))
+KEY_LIGHT_STRENGTH    = float(SETTINGS.get("key_light_strength", 4.0))
+KEY_LIGHT_ELEVATION   = float(SETTINGS.get("key_light_elevation_deg", 45.0))
+KEY_LIGHT_ANGLE       = float(SETTINGS.get("key_light_angle_deg", 3.0))
+_kl_color             = SETTINGS.get("key_light_color", [1.0, 1.0, 1.0])
+KEY_LIGHT_COLOR       = tuple(float(c) for c in (list(_kl_color) + [1.0, 1.0, 1.0])[:3])
 
 ANGLES = [
     (a["name"], a["tilt_deg"], a["yaw_deg"], a.get("distance_multiplier", 1.0))
@@ -159,6 +184,22 @@ def log_render_config(scene):
     log(f"Render engine:    {engine}")
     log(f"Resolution:       {res_x} x {res_y}")
     log(f"Film transparent: {scene.render.film_transparent}")
+    log(
+        f"Color management: view={scene.view_settings.view_transform} "
+        f"look={scene.view_settings.look or 'None'} "
+        f"exposure={scene.view_settings.exposure:+.2f} "
+        f"gamma={scene.view_settings.gamma:.2f} "
+        f"display={scene.display_settings.display_device}"
+    )
+    log(
+        f"Shadow catcher:   {'on' if SHADOW_CATCHER else 'off'} "
+        f"(size_x={SHADOW_CATCHER_SIZE:.1f}, z_offset={SHADOW_CATCHER_Z:+.4f})"
+    )
+    log(
+        f"Key light:        {'on' if KEY_LIGHT else 'off'} "
+        f"(strength={KEY_LIGHT_STRENGTH:.2f}W/m², elev={KEY_LIGHT_ELEVATION:.1f}°, "
+        f"angle={KEY_LIGHT_ANGLE:.1f}°)"
+    )
 
     if engine == 'CYCLES':
         prefs = bpy.context.preferences.addons['cycles'].preferences
@@ -603,6 +644,206 @@ def build_cameras(scene, phone):
     return cams
 
 
+SHADOW_CATCHER_NAME_PREFIX = "_ShadowCatcher_"
+KEY_LIGHT_NAME_PREFIX      = "_KeyLight_"
+
+
+def setup_shadow_catcher(scene, phone, enabled, size_multiplier=8.0, z_offset=0.0):
+    """Add (or remove) a Cycles shadow-catcher plane underneath ``phone``.
+
+    Creates a horizontal plane named ``_ShadowCatcher_<scene>`` flush with the
+    phone's lowest world-Z point, sized to ``size_multiplier`` times the phone's
+    widest XY dimension, and flags it as ``cycles.is_shadow_catcher`` so it
+    renders only the soft contact shadow falling on it - the rest of the plane
+    stays transparent. With ``film_transparent=True`` the final PNG ends up with
+    the phone + a real baked shadow on an otherwise transparent background,
+    which sidesteps Figma's drop-shadow-on-alpha quirks entirely.
+
+    ``z_offset`` pushes the plane *down* by that many world units (positive
+    values move further below the phone) - useful if you want a millimeter of
+    gap between the phone's chassis and the floor for a softer contact line.
+
+    When ``enabled`` is False, any previously-created catcher plane is removed
+    so toggling the setting off cleans up after itself.
+    """
+    plane_name = f"{SHADOW_CATCHER_NAME_PREFIX}{scene.name}"
+    existing = bpy.data.objects.get(plane_name)
+
+    if not enabled:
+        if existing is not None:
+            mesh = existing.data
+            bpy.data.objects.remove(existing, do_unlink=True)
+            if mesh is not None and mesh.users == 0:
+                bpy.data.meshes.remove(mesh)
+            log(f"[shadow] removed catcher plane '{plane_name}'")
+        return None
+
+    if scene.render.engine != 'CYCLES':
+        log(
+            f"[shadow] catcher requires Cycles (current engine: "
+            f"{scene.render.engine}) - skipping"
+        )
+        return None
+
+    bpy.context.view_layer.update()
+    bbox_world = [phone.matrix_world @ Vector(c) for c in phone.bound_box]
+    min_x = min(c.x for c in bbox_world)
+    max_x = max(c.x for c in bbox_world)
+    min_y = min(c.y for c in bbox_world)
+    max_y = max(c.y for c in bbox_world)
+    min_z = min(c.z for c in bbox_world)
+
+    center_x = 0.5 * (min_x + max_x)
+    center_y = 0.5 * (min_y + max_y)
+    footprint = max(max_x - min_x, max_y - min_y)
+    plane_size = max(footprint * float(size_multiplier), 1e-3)
+
+    plane = existing
+    if plane is None:
+        mesh_data = bpy.data.meshes.new(plane_name + "_mesh")
+        # Unit square in the XY plane centred on the origin; we scale to size
+        # via object scale so size tweaks don't require rebuilding the mesh.
+        mesh_data.from_pydata(
+            [(-0.5, -0.5, 0), (0.5, -0.5, 0), (0.5, 0.5, 0), (-0.5, 0.5, 0)],
+            [],
+            [(0, 1, 2, 3)],
+        )
+        mesh_data.update()
+        plane = bpy.data.objects.new(plane_name, mesh_data)
+        scene.collection.objects.link(plane)
+
+    plane.location = (center_x, center_y, min_z - float(z_offset))
+    plane.scale = (plane_size, plane_size, 1.0)
+    plane.rotation_euler = (0.0, 0.0, 0.0)
+
+    # Hide from selection in the outliner to avoid accidentally dragging it,
+    # but keep it visible to the renderer.
+    plane.hide_select = True
+    plane.hide_render = False
+    plane.hide_viewport = False
+
+    # Cycles object setting - present on every Object in Cycles-aware builds.
+    set_flag = False
+    try:
+        plane.cycles.is_shadow_catcher = True
+        set_flag = True
+    except AttributeError:
+        pass
+    if not set_flag:
+        # Fallback for older Blender shorthand (kept just in case).
+        try:
+            plane.is_shadow_catcher = True
+            set_flag = True
+        except AttributeError:
+            pass
+    if not set_flag:
+        log("[shadow] could not set is_shadow_catcher on plane - check engine")
+
+    log(
+        f"[shadow] catcher plane at "
+        f"({center_x:+.3f}, {center_y:+.3f}, {plane.location.z:+.3f}) "
+        f"size={plane_size:.3f} (footprint x{size_multiplier:.1f})"
+    )
+    return plane
+
+
+def setup_key_light(scene, enabled, strength=4.0, angle_deg=3.0,
+                    color=(1.0, 1.0, 1.0)):
+    """Create (or remove) a Sun light named ``_KeyLight_<scene>``.
+
+    The Sun's *orientation* is updated per-camera by ``aim_key_light_for_camera``
+    so its shadow always falls "behind" the phone from whichever camera is
+    rendering; this function just owns the light's existence and its non-
+    directional properties (energy, soft-shadow angle, colour).
+
+    Removes the light when ``enabled`` is False so toggling off cleans up.
+    """
+    light_name = f"{KEY_LIGHT_NAME_PREFIX}{scene.name}"
+    existing = bpy.data.objects.get(light_name)
+
+    if not enabled:
+        if existing is not None:
+            data = existing.data
+            bpy.data.objects.remove(existing, do_unlink=True)
+            if data is not None and data.users == 0 and isinstance(data, bpy.types.Light):
+                bpy.data.lights.remove(data)
+            log(f"[light] removed key light '{light_name}'")
+        return None
+
+    light_obj = existing
+    if light_obj is None or not isinstance(light_obj.data, bpy.types.Light) \
+            or light_obj.data.type != 'SUN':
+        # Replace anything stale with a fresh Sun.
+        if light_obj is not None:
+            stale_data = light_obj.data
+            bpy.data.objects.remove(light_obj, do_unlink=True)
+            if (stale_data is not None and stale_data.users == 0
+                    and isinstance(stale_data, bpy.types.Light)):
+                bpy.data.lights.remove(stale_data)
+        sun_data = bpy.data.lights.new(name=light_name + "_data", type='SUN')
+        light_obj = bpy.data.objects.new(name=light_name, object_data=sun_data)
+        scene.collection.objects.link(light_obj)
+
+    sun = light_obj.data
+    sun.energy = float(strength)
+    try:
+        # Cycles reads `Light.angle` as the sun's apparent angular diameter
+        # in radians; bigger angle = softer shadow penumbra.
+        sun.angle = math.radians(float(angle_deg))
+    except AttributeError:
+        pass
+    sun.color = (float(color[0]), float(color[1]), float(color[2]))
+
+    light_obj.hide_select = True
+    light_obj.hide_render = False
+    light_obj.hide_viewport = False
+
+    log(
+        f"[light] key light '{light_name}' "
+        f"strength={strength:.2f}W/m² angle={angle_deg:.1f}° "
+        f"colour=({color[0]:.2f}, {color[1]:.2f}, {color[2]:.2f})"
+    )
+    return light_obj
+
+
+def aim_key_light_for_camera(sun_obj, cam_obj, phone_center, elevation_deg=45.0):
+    """Aim a Sun light so it shines from "behind" the camera toward the phone.
+
+    Only the camera's *azimuth* (its horizontal direction onto the phone) is
+    inherited; the sun's elevation above horizontal is fixed at
+    ``elevation_deg`` so the cast shadow looks the same length/softness across
+    every camera angle (front / threequarter / hero-top). This is what makes
+    the shadow read "behind the phone from the viewer's POV" consistently in
+    the final image set.
+
+    ``elevation_deg`` is interpreted in standard terms:
+        0°   -> sun on the horizon, infinitely-long shadow
+        45°  -> nice product-shot default
+        90°  -> sun straight overhead, shadow directly beneath the phone
+    """
+    cam_to_phone = phone_center - cam_obj.location
+    horiz = Vector((cam_to_phone.x, cam_to_phone.y, 0.0))
+    if horiz.length < 1e-6:
+        # `hero_top` looks straight down: no horizontal direction to inherit.
+        # Default the azimuth to +Y so the shadow points toward the "bottom"
+        # of the rendered frame (UI_UP is -Y, so +Y = downward in screen).
+        horiz = Vector((0.0, 1.0, 0.0))
+    horiz.normalize()
+
+    elev_rad = math.radians(max(0.0, min(89.9, float(elevation_deg))))
+    direction = (
+        math.cos(elev_rad) * horiz
+        + math.sin(elev_rad) * Vector((0.0, 0.0, -1.0))
+    ).normalized()
+
+    # Sun lights are positionless for rendering, but parking the object near
+    # the camera (offset backward along its light direction) makes the
+    # viewport gizmo show up where the eye expects "behind the camera".
+    offset_dist = (cam_obj.location - phone_center).length * 0.5 or 1.0
+    sun_obj.location = cam_obj.location - direction * offset_dist
+    look_at(sun_obj, sun_obj.location + direction, UI_UP)
+
+
 def render_scene(scene_name, cfg):
     if scene_name not in bpy.data.scenes:
         log(f"[skip] scene '{scene_name}' not found in this .blend")
@@ -645,6 +886,26 @@ def render_scene(scene_name, cfg):
     scene.render.image_settings.file_format = 'PNG'
     scene.render.film_transparent = TRANSPARENT_BG
     scene.render.use_persistent_data = USE_PERSISTENT
+
+    # Color management: 'Standard' gives a 1:1 linear->sRGB pass-through, so
+    # on-screen UI pixels render at their authored values (no Filmic/AgX
+    # mid-tone roll-off muting the colours). The trade-off is that scenes
+    # whose lighting was tuned under Filmic/AgX look underexposed under
+    # 'Standard'; bump `view_exposure` to compensate, or switch to 'AgX' for
+    # a gentler modern tone-map.
+    try:
+        scene.view_settings.view_transform = VIEW_TRANSFORM
+    except (AttributeError, TypeError) as exc:
+        log(f"[warn] could not set view_transform={VIEW_TRANSFORM!r}: {exc}")
+    try:
+        scene.view_settings.look = VIEW_LOOK
+    except (AttributeError, TypeError) as exc:
+        log(f"[warn] could not set look={VIEW_LOOK!r}: {exc}")
+    try:
+        scene.view_settings.exposure = VIEW_EXPOSURE
+        scene.view_settings.gamma    = VIEW_GAMMA
+    except AttributeError:
+        pass
 
     if scene.render.engine == 'CYCLES':
         scene.cycles.samples = SAMPLES
@@ -721,7 +982,26 @@ def render_scene(scene_name, cfg):
     elif scene.render.engine in ('BLENDER_EEVEE_NEXT', 'BLENDER_EEVEE'):
         scene.eevee.taa_render_samples = SAMPLES
 
+    setup_shadow_catcher(
+        scene, phone,
+        enabled=SHADOW_CATCHER,
+        size_multiplier=SHADOW_CATCHER_SIZE,
+        z_offset=SHADOW_CATCHER_Z,
+    )
+
+    key_light = setup_key_light(
+        scene,
+        enabled=KEY_LIGHT,
+        strength=KEY_LIGHT_STRENGTH,
+        angle_deg=KEY_LIGHT_ANGLE,
+        color=KEY_LIGHT_COLOR,
+    )
+
     cams = build_cameras(scene, phone)
+
+    # Phone centroid in world space - reused per-camera to aim the key light.
+    _bbox_world = [phone.matrix_world @ Vector(c) for c in phone.bound_box]
+    phone_center = sum(_bbox_world, Vector()) / 8.0
 
     log_render_config(scene)
 
@@ -749,6 +1029,11 @@ def render_scene(scene_name, cfg):
             scene.render.filepath = os.path.join(
                 out_dir, f"{safe_screen}__{angle_name}.png"
             )
+            if key_light is not None:
+                aim_key_light_for_camera(
+                    key_light, cam, phone_center,
+                    elevation_deg=KEY_LIGHT_ELEVATION,
+                )
             bpy.context.view_layer.update()
             log(f"Rendering {scene.render.filepath}")
             bpy.ops.render.render(write_still=True)

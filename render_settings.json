@@ -11,6 +11,18 @@
     "fit_margin": 1.08,
     "default_lens_mm": 50,
     "supported_extensions": [".png", ".jpg", ".jpeg", ".webp"],
+    "view_transform": "Standard",
+    "view_look": "None",
+    "view_exposure": 0.0,
+    "view_gamma": 1.0,
+    "shadow_catcher": false,
+    "shadow_catcher_size_multiplier": 8.0,
+    "shadow_catcher_z_offset": 0.0,
+    "key_light": false,
+    "key_light_strength": 4.0,
+    "key_light_elevation_deg": 45.0,
+    "key_light_angle_deg": 3.0,
+    "key_light_color": [1.0, 1.0, 1.0],
 
     "angles": [
         { "name": "front",                  "tilt_deg": 15, "yaw_deg": 180, "distance_multiplier": 1.0 },
