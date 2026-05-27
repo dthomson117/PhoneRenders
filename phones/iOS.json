@@ -1,0 +1,9 @@
+{
+    "phone_object":    "iPhone 17 ProMax",
+    "screen_material": "17ProMax_Screen",
+    "screens_dir":     "//screenshots/iOS/",
+    "screen_node_id":  "ScreenTextureiOS",
+
+    "shadow_catcher_z_offset": -0.003,
+    "key_light_angle_deg":     30.0
+}

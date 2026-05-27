@@ -1,26 +1,23 @@
 # PhoneRenders
 
 Batch-render beautiful 3D phone mockups for the App Store / Play Store from
-flat screenshots, using Blender + a single Python script.
+flat screenshots, using Blender and a single Python script.
 
 Drop your screenshots into `screenshots/iOS/` or `screenshots/Android/`, run
-`render.bat` (or `render.sh`, or invoke Blender directly), and out pops a
-folder full of `{screen}__{angle}.png` images - one per camera angle per
-screenshot, per platform - rendered with Cycles and a transparent background
-so they composite cleanly onto marketing backgrounds.
+`render.bat` / `render.sh`, and you'll get a folder of
+`{screen}__{angle}.png` images - one per camera angle per screenshot, per
+platform - rendered with Cycles on a transparent background so they
+composite cleanly onto marketing artwork. Optional silhouette SVGs can be
+generated alongside the PNGs.
 
 ## How to use
 
 ### 1. Install
 
-- **Blender 4.2+** (tested on 4.2 LTS and newer). Older versions may work,
-  but the script uses GPU-side OpenImageDenoise and the light tree, both of
-  which need 4.2+.
-- **Git LFS** - the `.blend` scene and `.exr` HDRI are stored via LFS, so a
-  plain `git clone` without LFS will leave you with pointer files instead of
-  the real assets.
-- A discrete GPU is strongly recommended (OptiX / CUDA / HIP / oneAPI / Metal
-  all auto-detected), but the script will fall back to CPU rendering.
+- **Blender 4.2+** (uses GPU OpenImageDenoise and the light tree).
+- **Git LFS** - the `.blend` and HDRI are stored via LFS.
+- A discrete GPU is recommended (OptiX / CUDA / HIP / oneAPI / Metal are
+  auto-detected); CPU works too.
 
 ```bash
 git lfs install
@@ -30,188 +27,179 @@ cd PhoneRenders
 
 ### 2. Capture clean screenshots
 
-The 3D phone wraps your screenshot directly onto a flat rectangular screen
-mesh, so the cleanest input is a **flat, full-bleed PNG with no device
-chrome** - no rounded corners, no notch / Dynamic Island mask, no host-OS
-overlays. If your source PNGs have masked corners or punched-out cutouts,
-those holes will show up in the final render too.
+The 3D phone wraps your screenshot onto a flat rectangular screen, so feed
+it **flat, full-bleed PNGs with no rounded corners, notch / Dynamic Island
+mask, or OS overlays**. Any holes in the source PNG will show up in the
+render.
 
-Below are the simplest ways to get a clean rectangular screenshot out of
-each platform.
-
-#### iOS - Xcode Simulator
-
-The iOS Simulator masks screenshots with the device's rounded corners and
-Dynamic Island / notch by default. The fix is to take the screenshot via
-`simctl` with `--mask=ignored`, which tells the simulator to skip the
-device mask entirely:
+**iOS Simulator** - take screenshots through `simctl` so the device mask
+isn't baked in:
 
 ```bash
 xcrun simctl io booted screenshot --mask=ignored ios-screen.png
 ```
 
-The `--mask` flag accepts `ignored`, `alpha`, or `black` - `ignored` is the
-one you want for flat rectangular output. The result is a clean
-1290 × 2796 (or whatever your active simulator's native resolution is)
-rectangle that the 3D phone can wrap perfectly.
+Real iOS devices already produce flat rectangles via the side-button combo
+or Xcode's *Devices and Simulators → Take Screenshot*.
 
-While you're at it, you can also disable the on-screen device bezel via
-**Simulator → Window → Show Device Bezels** (uncheck), but that only
-changes the live preview, not the saved screenshot. The `--mask=ignored`
-flag is what matters for the file on disk.
-
-For real devices (not the Simulator), screenshots taken via the side-button
-combo or Xcode's **Devices and Simulators → Take Screenshot** are already
-flat rectangles - iOS doesn't bake the rounded corners into the framebuffer.
-
-#### Android - adb
-
-The cleanest way to capture an Android screen (real device or emulator) is
-straight through `adb`, which produces a flat rectangular PNG with no
-cutout mask:
+**Android** - capture through `adb`:
 
 ```bash
 adb exec-out screencap -p > android-screen.png
 ```
 
-`exec-out` keeps stdout in binary mode so the PNG isn't corrupted by line-
-ending translation. If you're on Windows **PowerShell**, that redirect can
-mangle the bytes - use Command Prompt, Git Bash, or the safer two-step
-form instead:
+On PowerShell that redirect can corrupt the PNG; use Git Bash / cmd, or
+this two-step form:
 
 ```bash
-adb shell screencap -p /sdcard/s.png
-adb pull /sdcard/s.png android-screen.png
-adb shell rm /sdcard/s.png
+adb shell screencap -p /sdcard/s.png && adb pull /sdcard/s.png && adb shell rm /sdcard/s.png
 ```
 
-If you're using an Android emulator, **Android Studio → Device Manager →
-Take Screenshot** (or the camera icon in the emulator's toolbar) also
-produces a clean rectangle - just make sure "Show device frame" is turned
-off in the emulator settings, otherwise the saved PNG will include the
-fake bezel.
+For Android Studio, take screenshots via the emulator toolbar with
+*"Show device frame"* turned off.
 
-### 3. Add your screenshots
+### 3. Drop them in
 
-Drop each platform's PNGs into the matching folder. Anything `.png`,
-`.jpg`, `.jpeg`, or `.webp` works. The filename (minus extension) becomes
-the output prefix - so `record-bench-press-reps.png` will render out as
-`record-bench-press-reps__front.png`, `record-bench-press-reps__hero_top.png`,
-and so on.
+Copy each platform's screenshots into the matching folder. `.png`, `.jpg`,
+`.jpeg`, and `.webp` all work. The filename (minus extension) becomes the
+output prefix - `record-bench-press.png` → `record-bench-press__front.png`,
+`record-bench-press__hero_top.png`, etc.
 
 ```bash
-cp ~/my-app/ios-screens/*.png     screenshots/iOS/
-cp ~/my-app/android-screens/*.png screenshots/Android/
+cp ~/ios-screens/*.png     screenshots/iOS/
+cp ~/android-screens/*.png screenshots/Android/
 ```
 
 ### 4. Render
 
-**Windows:** double-click `render.bat`.
+| Platform                        | Command                                                      |
+| ------------------------------- | ------------------------------------------------------------ |
+| Windows                         | double-click `render.bat`                                    |
+| macOS / Linux / Git Bash / WSL  | `./render.sh`                                                |
+| Any                             | `blender --background phones.blend --python render_screens.py` |
 
-**macOS / Linux / Git Bash / WSL:** run `./render.sh`.
+Both launchers accept an optional platform filter - `ios`, `android`, or
+`both` (default). Renders land in `renders/iOS/` and `renders/Android/`.
 
-**Or invoke Blender directly:**
+The launchers also accept two optional flags so you can override
+`output_dir` and the `outputs` block without editing
+`render_settings.json`:
+
+| Flag                                  | Effect                                                                                                                                                                  |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `-o DIR`, `--output DIR`              | Override `output_dir`. Absolute paths work as-is; prefix with `//` to resolve relative to the `.blend` (Blender's convention). Bare relative paths resolve against the shell's current working directory. |
+| `--outputs LIST`                      | Comma-separated list of outputs to enable. Listed outputs are turned on, everything else off. Per-phone `outputs` overrides are ignored when this flag is set.          |
+
+`--outputs` tokens:
+
+- `shadow` (alias for `png_with_shadow`)
+- `no_shadow` (alias for `png_no_shadow`; `flat` also works)
+- `svg` (alias for `svg_no_shadow`)
+- `all` - enable all three
+- `none` - disable all three
+
+Examples:
 
 ```bash
-blender --background phones.blend --python render_screens.py
+./render.sh ios -o /tmp/preview --outputs shadow
+./render.sh --outputs svg,no_shadow android
 ```
-
-Renders land in `renders/iOS/` and `renders/Android/`, one PNG per
-`{screenshot}__{angle}` combination.
-
-#### Render one platform only
-
-Both launchers accept an optional platform filter:
-
-```bash
-./render.sh ios          # iOS only
-./render.sh android      # Android only
-./render.sh both         # explicit "render everything" (default)
-
-render.bat ios           # same flags on Windows
-render.bat android
-```
-
-#### Finding Blender automatically
-
-`render.bat` and `render.sh` both auto-discover Blender from (in order):
-
-1. The `BLENDER_EXE` environment variable
-2. `PATH`
-3. Common install locations (`Program Files\Blender Foundation`, Steam,
-   Winget, `/Applications/Blender.app`, `/usr/local/bin`, snap, flatpak, …)
-4. *(Windows only)* The `HKLM\Software\BlenderFoundation` registry key
-
-If none of those find Blender, set the env var manually:
 
 ```bat
-set BLENDER_EXE=C:\path\to\blender.exe
-render.bat
+render.bat ios -o C:\tmp\preview --outputs shadow,svg
 ```
+
+If the launchers can't auto-discover Blender (they check `BLENDER_EXE`,
+`PATH`, common install locations, and on Windows the
+`HKLM\Software\BlenderFoundation` registry key), point them at it
+manually:
 
 ```bash
 BLENDER_EXE=/path/to/blender ./render.sh
 ```
 
+```bat
+set BLENDER_EXE=C:\path\to\blender.exe && render.bat
+```
+
 ## Example output
 
 The repo ships with one default screenshot per platform and the six
-rendered angles produced for each:
+angles rendered for each, in all three output variants
+(`shadow` / `no_shadow` / `svg`):
 
-| Angle | iOS | Android |
-| --- | --- | --- |
-| `front`                  | <img src="renders/iOS/default_ios__front.png"                  alt="iOS front"                  width="320"> | <img src="renders/Android/default_android__front.png"                  alt="Android front"                  width="320"> |
-| `threequarter_left`      | <img src="renders/iOS/default_ios__threequarter_left.png"      alt="iOS three-quarter left"      width="320"> | <img src="renders/Android/default_android__threequarter_left.png"      alt="Android three-quarter left"      width="320"> |
-| `threequarter_right`     | <img src="renders/iOS/default_ios__threequarter_right.png"     alt="iOS three-quarter right"     width="320"> | <img src="renders/Android/default_android__threequarter_right.png"     alt="Android three-quarter right"     width="320"> |
-| `threequarter_left_top`  | <img src="renders/iOS/default_ios__threequarter_left_top.png"  alt="iOS three-quarter left top"  width="320"> | <img src="renders/Android/default_android__threequarter_left_top.png"  alt="Android three-quarter left top"  width="320"> |
-| `threequarter_right_top` | <img src="renders/iOS/default_ios__threequarter_right_top.png" alt="iOS three-quarter right top" width="320"> | <img src="renders/Android/default_android__threequarter_right_top.png" alt="Android three-quarter right top" width="320"> |
-| `hero_top`               | <img src="renders/iOS/default_ios__hero_top.png"               alt="iOS hero top"               width="320"> | <img src="renders/Android/default_android__hero_top.png"               alt="Android hero top"               width="320"> |
+| Angle | iOS shadow | iOS no shadow | iOS SVG | Android shadow | Android no shadow | Android SVG |
+| --- | --- | --- | --- | --- | --- | --- |
+| `front`                  | <img src="renders/iOS/shadow/default_ios__front.png"                  alt="iOS front (shadow)"                  width="180"> | <img src="renders/iOS/no_shadow/default_ios__front.png"                  alt="iOS front (no shadow)"                  width="180"> | <img src="renders/iOS/svg/default_ios__front.svg"                  alt="iOS front (svg)"                  width="180"> | <img src="renders/Android/shadow/default_android__front.png"                  alt="Android front (shadow)"                  width="180"> | <img src="renders/Android/no_shadow/default_android__front.png"                  alt="Android front (no shadow)"                  width="180"> | <img src="renders/Android/svg/default_android__front.svg"                  alt="Android front (svg)"                  width="180"> |
+| `threequarter_left`      | <img src="renders/iOS/shadow/default_ios__threequarter_left.png"      alt="iOS three-quarter left (shadow)"      width="180"> | <img src="renders/iOS/no_shadow/default_ios__threequarter_left.png"      alt="iOS three-quarter left (no shadow)"      width="180"> | <img src="renders/iOS/svg/default_ios__threequarter_left.svg"      alt="iOS three-quarter left (svg)"      width="180"> | <img src="renders/Android/shadow/default_android__threequarter_left.png"      alt="Android three-quarter left (shadow)"      width="180"> | <img src="renders/Android/no_shadow/default_android__threequarter_left.png"      alt="Android three-quarter left (no shadow)"      width="180"> | <img src="renders/Android/svg/default_android__threequarter_left.svg"      alt="Android three-quarter left (svg)"      width="180"> |
+| `threequarter_right`     | <img src="renders/iOS/shadow/default_ios__threequarter_right.png"     alt="iOS three-quarter right (shadow)"     width="180"> | <img src="renders/iOS/no_shadow/default_ios__threequarter_right.png"     alt="iOS three-quarter right (no shadow)"     width="180"> | <img src="renders/iOS/svg/default_ios__threequarter_right.svg"     alt="iOS three-quarter right (svg)"     width="180"> | <img src="renders/Android/shadow/default_android__threequarter_right.png"     alt="Android three-quarter right (shadow)"     width="180"> | <img src="renders/Android/no_shadow/default_android__threequarter_right.png"     alt="Android three-quarter right (no shadow)"     width="180"> | <img src="renders/Android/svg/default_android__threequarter_right.svg"     alt="Android three-quarter right (svg)"     width="180"> |
+| `threequarter_left_top`  | <img src="renders/iOS/shadow/default_ios__threequarter_left_top.png"  alt="iOS three-quarter left top (shadow)"  width="180"> | <img src="renders/iOS/no_shadow/default_ios__threequarter_left_top.png"  alt="iOS three-quarter left top (no shadow)"  width="180"> | <img src="renders/iOS/svg/default_ios__threequarter_left_top.svg"  alt="iOS three-quarter left top (svg)"  width="180"> | <img src="renders/Android/shadow/default_android__threequarter_left_top.png"  alt="Android three-quarter left top (shadow)"  width="180"> | <img src="renders/Android/no_shadow/default_android__threequarter_left_top.png"  alt="Android three-quarter left top (no shadow)"  width="180"> | <img src="renders/Android/svg/default_android__threequarter_left_top.svg"  alt="Android three-quarter left top (svg)"  width="180"> |
+| `threequarter_right_top` | <img src="renders/iOS/shadow/default_ios__threequarter_right_top.png" alt="iOS three-quarter right top (shadow)" width="180"> | <img src="renders/iOS/no_shadow/default_ios__threequarter_right_top.png" alt="iOS three-quarter right top (no shadow)" width="180"> | <img src="renders/iOS/svg/default_ios__threequarter_right_top.svg" alt="iOS three-quarter right top (svg)" width="180"> | <img src="renders/Android/shadow/default_android__threequarter_right_top.png" alt="Android three-quarter right top (shadow)" width="180"> | <img src="renders/Android/no_shadow/default_android__threequarter_right_top.png" alt="Android three-quarter right top (no shadow)" width="180"> | <img src="renders/Android/svg/default_android__threequarter_right_top.svg" alt="Android three-quarter right top (svg)" width="180"> |
+| `hero_top`               | <img src="renders/iOS/shadow/default_ios__hero_top.png"               alt="iOS hero top (shadow)"               width="180"> | <img src="renders/iOS/no_shadow/default_ios__hero_top.png"               alt="iOS hero top (no shadow)"               width="180"> | <img src="renders/iOS/svg/default_ios__hero_top.svg"               alt="iOS hero top (svg)"               width="180"> | <img src="renders/Android/shadow/default_android__hero_top.png"               alt="Android hero top (shadow)"               width="180"> | <img src="renders/Android/no_shadow/default_android__hero_top.png"               alt="Android hero top (no shadow)"               width="180"> | <img src="renders/Android/svg/default_android__hero_top.svg"               alt="Android hero top (svg)"               width="180"> |
 
-Default phones in the shipped `.blend`:
+Default phones shipped in the `.blend`:
 
 - **iOS** - iPhone 17 Pro Max
 - **Android** - Google Pixel 9 Pro XL
 
-Both are rendered at **2160 × 3840** (4K portrait) with a transparent background.
+Both render at **1440 × 2560** with a transparent background. Adjust
+`resolution` in `render_settings.json` for larger or smaller output.
 
 ## How it works
 
-`render_screens.py` runs inside Blender (it imports `bpy`). For each scene
-defined in `render_settings.json`:
+`render_screens.py` runs inside Blender (it imports `bpy`) and delegates
+to the `render_lib/` package. For each phone defined in `phones/*.json`:
 
 1. Finds the phone object and locates its **screen Image Texture node** -
-   either by the explicit `screen_node_id` (matched against node name *or*
-   label), or by falling back to the first image node in the screen material.
-2. Computes a bounding box around the phone and builds **one camera per
-   entry in `angles`**. Each angle is described in degrees - `tilt_deg` away
-   from the screen normal, `yaw_deg` around the phone - and gets framed to
-   the phone using a `fit_margin` so every render is composed identically.
-3. Iterates over every image in the platform's `screens_dir`, swaps it into
-   the screen texture node, and renders the full set of cameras.
+   by `screen_node_id` (matched against node name *or* label), or by
+   falling back to the first image node in the screen material.
+2. Builds **one camera per `angles` entry** by computing a bounding box
+   around the phone and framing it with `fit_margin` padding so every
+   render is composed identically. Angles are described in degrees
+   (`tilt_deg` away from the screen normal, `yaw_deg` around the phone).
+3. Iterates the platform's `screens_dir`, swaps each image into the
+   screen texture node, and renders the full set of cameras - optionally
+   producing PNGs with a shadow-catcher pass, PNGs with no shadow, and
+   silhouette SVGs traced from the no-shadow alpha.
 
-A few quality details worth knowing about:
+A few quality details:
 
-- **Cycles + OpenImageDenoise (GPU)** is preferred over OptiX denoising -
-  OptiX tends to hallucinate asterisk-shaped artefacts on tiny dark features
-  like speaker grilles.
-- Adaptive sampling is tuned to keep fine detail crisp
-  (`threshold=0.01`, `min_samples=64`).
-- Caustics are off and `blur_glossy=1.0` to suppress fireflies on the
+- **Cycles + OpenImageDenoise (GPU)** is preferred over OptiX -
+  OptiX tends to hallucinate asterisk-shaped artefacts on tiny dark
+  features like speaker grilles.
+- Adaptive sampling is tuned for fine detail
+  (`threshold=0.01`, `min_samples=16`).
+- Caustics are off and `blur_glossy=1.0` suppresses fireflies on the
   chamfered phone edges and glass.
+- A compositor alpha-threshold step crushes near-transparent denoiser
+  fringes so the cutout edge stays crisp.
 - Missing external image references in the shipped `.blend` are silently
-  swapped out for a 1×1 transparent fallback, so an out-of-date texture
-  path can't break your render.
+  swapped for a 1×1 transparent fallback so an out-of-date texture path
+  can't break your render.
 
 ## Configuration: `render_settings.json`
 
-Every tweakable parameter lives in `render_settings.json`. The file is
-loaded from one of these locations (first match wins):
+Settings are loaded from the first match of:
 
 1. The path in the `RENDER_SETTINGS` environment variable
 2. The folder containing `render_screens.py`
-3. The folder containing the loaded `.blend` file
+3. The folder containing the loaded `.blend`
 
-Top-level keys:
+The file is split into two sections - `basic` for everyday knobs and
+`advanced` for fine-tuning - plus a top-level `phones_dir`:
+
+```json
+{
+  "basic":    { /* output, resolution, samples, device, outputs, key_light */ },
+  "advanced": { /* framing, lighting, shadow catcher, SVG, angles, ... */ },
+  "phones_dir": "phones"
+}
+```
+
+You only need to override what you want to change; missing keys fall back
+to the built-in defaults (see `render_lib/settings.py`).
+
+### `basic`
 
 | Key | Type | What it does |
 | --- | --- | --- |
@@ -221,13 +209,29 @@ Top-level keys:
 | `samples` | int | Cycles samples (override with `RENDER_SAMPLES` env var). |
 | `transparent_background` | bool | Film alpha for compositing. |
 | `device` | `"GPU"` / `"CPU"` | Cycles render device. |
+| `outputs` | object | Which outputs to write - `png_with_shadow`, `png_no_shadow`, `svg_no_shadow`. |
+| `key_light` | bool | Add a high-intensity directional key light to brighten the phone. |
+
+### `advanced`
+
+| Key | Type | What it does |
+| --- | --- | --- |
 | `use_auto_tile` / `tile_size` | bool / int | Cycles tiling. |
-| `use_persistent_data` | bool | Reuses BVH between frames - faster. |
-| `fit_margin` | float | Extra room around the phone when framing (1.08 = 8% padding). |
+| `use_persistent_data` | bool | Reuse BVH between frames - faster. |
+| `fit_margin` | float | Padding around the phone when framing (1.08 = 8% margin). |
+| `shadow_fit_margin` | float | Same, but used on the with-shadow pass (usually a bit wider). |
 | `default_lens_mm` | float | Starting focal length before auto-fit. |
 | `supported_extensions` | string[] | Filename extensions treated as screenshots. |
+| `view_transform` / `view_look` | string | Blender colour-management view + look. |
+| `view_exposure` / `view_gamma` | float | Exposure and gamma applied at view-transform time. |
+| `shadow_catcher_size_multiplier` | float | Scale of the catcher plane vs. the phone footprint. |
+| `shadow_catcher_z_offset` | float | Raise / lower the catcher in metres (negative = up). |
+| `alpha_threshold` | float | Compositor cutoff that snaps near-transparent pixels off (0 = disabled). |
+| `key_light_*` | various | Strength, elevation, angle, shadow azimuth, RGB colour, and visibility flags for the optional key light. |
+| `phone_isolate_indirect` | bool | Hide the phone from indirect bounces during the shadow pass, so reflected phone colour doesn't tint the catcher. |
+| `svg_alpha_threshold` | float | Alpha cutoff used when tracing the silhouette SVG. |
+| `svg_outline_simplify_tolerance_px` | float | Douglas-Peucker tolerance for the SVG outline (smaller = more vertices). |
 | `angles` | array | Camera angles, see below. |
-| `scenes` | object | Per-platform setup, see below. |
 
 ### `angles`
 
@@ -246,64 +250,107 @@ Each angle is a small object:
 
 Add, remove, or reorder angles freely - the script just iterates the list.
 
-### `scenes`
+## Per-phone configs (`phones/`)
+
+Each phone gets its own JSON file in `phones/`. The filename (minus
+`.json`) is the scene name and must match a Blender scene of the same
+name in `phones.blend`:
+
+```
+phones/
+├── iOS.json       → renders the "iOS" scene
+└── Android.json   → renders the "Android" scene
+```
+
+A phone file looks like:
 
 ```json
-"iOS": {
+{
   "phone_object":    "iPhone 17 ProMax",
   "screen_material": "17ProMax_Screen",
   "screens_dir":     "//screenshots/iOS/",
-  "screen_node_id":  "ScreenTextureiOS"
+  "screen_node_id":  "ScreenTextureiOS",
+
+  "shadow_catcher_z_offset": -0.003
 }
 ```
 
-- `phone_object` - the Blender object name (in the scene's outliner).
-- `screen_material` - the material whose image-texture node holds the screen
-  content.
-- `screens_dir` - folder of screenshots to iterate (`//` is .blend-relative).
-- `screen_node_id` - **recommended**. Set this to a unique name/label on the
-  screen Image Texture node so the script never has to guess which image
-  node is the screen. If you skip it, the script falls back to "the first
-  image node in the screen material".
-- `autofit_screen_uvs` *(optional, default `true`)* - when `true`, the
-  script auto-normalises the screen face's UV bbox to fill 0..1 via a
-  generated Mapping node, so the screenshot fills the whole face regardless
-  of how the mesh is unwrapped. Set to `false` to honour the .blend's
-  hand-laid UVs verbatim - useful when the screen mesh has rounded corners
-  cutting into UI content (e.g. status-bar icons disappearing under a
-  curved bezel) and you want to inset the screenshot by scaling the UV
-  island up in the UV editor. When disabled, the Image Texture node is
-  also forced to `Extension: Clip` so the area outside 0..1 renders
-  transparent instead of tiling the edge pixels.
-- `screen_inset` *(optional, default `0.0`)* - fraction (0..0.49) by which
-  to shrink the screenshot inward on every side when autofit is enabled.
-  Use this when a phone mesh has rounded display corners that crop status-
-  bar icons or other edge content - e.g. `0.02` leaves a 2% transparent
-  margin around the screenshot so UI elements clear the corner curve. The
-  Image Texture node is automatically switched to `Extension: Clip` when
-  `screen_inset > 0` so the margin renders transparent. Ignored when
-  `autofit_screen_uvs` is `false` (use the UV editor in that case).
+Required keys:
 
-Each scene in `scenes` must correspond to a Blender scene of the same name
-inside `phones.blend`. You can rename / duplicate scenes inside Blender
-to add e.g. an iPad or a second Android device - just mirror the rename
-in `render_settings.json`.
+- `phone_object` - Blender object name (as in the scene's outliner).
+- `screen_material` - the material whose image-texture node holds the
+  screen content.
+- `screens_dir` - folder of screenshots to iterate (`//` is .blend-relative).
+- `screen_node_id` - **recommended**. Unique name *or* label on the screen
+  Image Texture node so the script never has to guess which node is the
+  screen. If omitted, the script falls back to the first image node in
+  the screen material.
+
+Optional - screen UV behaviour:
+
+- `autofit_screen_uvs` *(default `true`)* - normalise the screen face's UV
+  bbox to 0..1 via a generated Mapping node so the screenshot fills the
+  whole face regardless of how the mesh was unwrapped. Set `false` to
+  honour the .blend's hand-laid UVs verbatim - useful when rounded screen
+  corners crop UI content and you want to inset by scaling the UV island
+  in the UV editor. When disabled, the Image Texture node is also forced
+  to `Extension: Clip` so the area outside 0..1 renders transparent.
+- `screen_inset` *(default `0.0`)* - fraction (0..0.49) to shrink the
+  screenshot inward on every side when autofit is enabled. Use this when
+  rounded display corners crop status-bar icons (e.g. `0.02` leaves a 2%
+  transparent margin). Ignored when `autofit_screen_uvs` is `false` (use
+  the UV editor instead).
+
+Optional - per-phone overrides. Any framing, shadow-catcher, key-light,
+or alpha-threshold setting from `advanced` can be overridden per phone.
+The resolved values are printed under `[overrides] per-scene values in
+effect:` in the log. Supported keys:
+
+- `fit_margin`, `shadow_fit_margin`
+- `shadow_catcher_size_multiplier`, `shadow_catcher_z_offset`
+- `alpha_threshold`
+- `key_light`, `key_light_strength`, `key_light_elevation_deg`,
+  `key_light_angle_deg`, `key_light_shadow_azimuth_deg`, `key_light_color`,
+  `key_light_visible_glossy`, `key_light_visible_transmission`
+- `phone_isolate_indirect`
+- `outputs` (`png_with_shadow` / `png_no_shadow` / `svg_no_shadow`)
+
+For example, the shipped `phones/iOS.json` raises the catcher plane by
+3 mm with `shadow_catcher_z_offset: -0.003` to compensate for the iPhone
+17 Pro Max's deep camera plateau, which would otherwise leave the catcher
+floating too far below the body and wash the shadow out.
+
+**Adding a new phone:** add a Blender scene of the right name to
+`phones.blend`, then drop `phones/<SceneName>.json` listing the object
+name, material, and screenshots folder. No code changes, no edits to
+`render_settings.json`.
+
+**Choosing a different directory:** set `phones_dir` in
+`render_settings.json` to any path (relative to the settings file,
+absolute, or `//`-relative to the .blend). Set it to an empty string to
+fall back to a legacy inline `scenes` block (still supported for
+back-compat).
+
+**Naming override:** if a JSON file's stem isn't the Blender scene name
+you want, add `"name": "OtherSceneName"` inside the file - that wins
+over the filename.
 
 ## Customising the .blend
 
 The shipped scenes assume the **phone screen faces +Z, with the UI top at
--Y and the UI right at +X**. If you swap in a different phone model, rotate
-it in object mode so the local axes match - the camera math relies on it.
+-Y and the UI right at +X**. If you swap in a different phone model,
+rotate it in object mode so the local axes match - the camera math
+relies on it.
 
 For each new phone:
 
-1. Drop the model into the right Blender scene (`iOS`, `Android`, or a new
-   scene you define in `render_settings.json`).
+1. Drop the model into the right Blender scene (`iOS`, `Android`, or a
+   new scene you define by adding a JSON file under `phones/`).
 2. Make sure the screen face has its own material.
 3. Add an **Image Texture** node to that material, connect its `Color`
    output to both `Base Color` and `Emission Color` on the BSDF, and give
-   the node a unique **name** *or* **label** (e.g. `ScreenTextureiOS`).
-4. Put that same string into `scenes.<name>.screen_node_id`.
+   the node a unique **name** or **label** (e.g. `ScreenTextureiOS`).
+4. Put that same string into `phones/<SceneName>.json`'s `screen_node_id`.
 
 ## Environment-variable overrides
 
@@ -311,7 +358,9 @@ For each new phone:
 | --- | --- |
 | `RENDER_SETTINGS` | Path to an alternative settings JSON. |
 | `RENDER_SAMPLES` | Overrides `samples` for a single run (handy for previews). |
-| `RENDER_PLATFORMS` | Comma-separated platform filter (`iOS`, `Android`). Set automatically by `render.bat` / `render.sh` when you pass `ios` / `android`. |
+| `RENDER_PLATFORMS` | Comma-separated platform filter (e.g. `iOS`, `Android`). Set automatically by `render.bat` / `render.sh` when you pass `ios` / `android`. |
+| `RENDER_OUTPUT_DIR` | Overrides `output_dir`. Set automatically by `-o` / `--output` on the launchers. |
+| `RENDER_OUTPUTS` | Comma-separated list of outputs to enable (tokens: `shadow`, `no_shadow` / `flat`, `svg`, `all`, `none`). Set automatically by `--outputs` on the launchers. |
 | `BLENDER_EXE` | Skip the launcher's auto-discovery and use a specific Blender binary. |
 
 Example - low-sample preview pass with a custom settings file:
@@ -327,23 +376,33 @@ blender --background phones.blend --python render_screens.py
 ```
 .
 ├── phones.blend          # Phone models + scenes (Git LFS)
-├── render_screens.py     # The Blender-side rendering script
-├── render_settings.json  # All tweakable parameters
+├── render_screens.py     # Tiny entry point that imports render_lib
+├── render_lib/           # Settings / GPU / lighting / cameras / compositor / SVG
+├── render_settings.json  # Global parameters (basic + advanced sections)
+├── phones/               # One JSON file per phone (scene-name = filename)
+│   ├── iOS.json
+│   └── Android.json
 ├── render.bat            # Windows launcher with Blender auto-discovery
-├── render.sh             # macOS / Linux / Git Bash launcher
+├── render.sh             # macOS / Linux / Git Bash / WSL launcher
 ├── hdr/                  # Studio HDRI used in the .blend (Git LFS)
 ├── screenshots/
 │   ├── iOS/              # Drop your iOS screens here
 │   └── Android/          # Drop your Android screens here
 └── renders/
-    ├── iOS/              # Renders land here
+    ├── iOS/              # Renders land here, split by output variant
+    │   ├── shadow/       #   PNGs with shadow-catcher pass
+    │   ├── no_shadow/    #   PNGs with no shadow
+    │   └── svg/          #   Silhouette SVGs
     └── Android/
+        ├── shadow/
+        ├── no_shadow/
+        └── svg/
 ```
 
 ## Contributing
 
-PRs welcome - especially for new phone models, additional camera angles, or
-backgrounds / studio setups. See [`CONTRIBUTING.md`](./CONTRIBUTING.md).
+PRs welcome - especially for new phone models, additional camera angles,
+or backgrounds / studio setups. See [`CONTRIBUTING.md`](./CONTRIBUTING.md).
 
 ## License
 

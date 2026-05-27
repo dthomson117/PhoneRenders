@@ -3,10 +3,24 @@
 # Works on macOS, Linux, and Windows under Git Bash / WSL.
 #
 # Usage:
-#   ./render.sh              # render both iOS + Android (default)
-#   ./render.sh ios          # iOS only
-#   ./render.sh android      # Android only
-#   ./render.sh both | all   # explicit "render everything"
+#   ./render.sh                            # render iOS + Android (default)
+#   ./render.sh ios                        # iOS only
+#   ./render.sh android                    # Android only
+#   ./render.sh both | all                 # explicit "render everything"
+#
+# Optional flags (any order, mix with platform):
+#   -o DIR, --output DIR                   # override output_dir (RENDER_OUTPUT_DIR)
+#   --outputs LIST                         # override which outputs to write
+#                                          # comma-separated; tokens:
+#                                          #   shadow      = png_with_shadow
+#                                          #   no_shadow   = png_no_shadow   (alias: flat)
+#                                          #   svg         = svg_no_shadow
+#                                          #   all         = enable all three
+#                                          #   none        = disable all three
+#
+# Examples:
+#   ./render.sh ios -o /tmp/preview --outputs shadow
+#   ./render.sh --outputs svg,no_shadow android
 #
 # Override Blender location with: BLENDER_EXE=/path/to/blender ./render.sh
 
@@ -16,9 +30,57 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BLEND_FILE="$SCRIPT_DIR/phones.blend"
 SCRIPT_FILE="$SCRIPT_DIR/render_screens.py"
 
-# --- platform filter (positional arg 1) ----------------------------------
+print_help() {
+  sed -n '2,22p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+}
+
+# --- argument parsing ----------------------------------------------------
+PLATFORM_ARG=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h|--help)
+      print_help
+      exit 0
+      ;;
+    -o|--output)
+      [[ $# -ge 2 ]] || { echo "ERROR: '$1' requires a directory argument." >&2; exit 1; }
+      export RENDER_OUTPUT_DIR="$2"
+      shift 2
+      ;;
+    --output=*)
+      export RENDER_OUTPUT_DIR="${1#*=}"
+      shift
+      ;;
+    --outputs)
+      [[ $# -ge 2 ]] || { echo "ERROR: '--outputs' requires a value (e.g. shadow,svg)." >&2; exit 1; }
+      export RENDER_OUTPUTS="$2"
+      shift 2
+      ;;
+    --outputs=*)
+      export RENDER_OUTPUTS="${1#*=}"
+      shift
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -*)
+      echo "ERROR: Unknown flag '$1'. Run with --help for usage." >&2
+      exit 1
+      ;;
+    *)
+      if [[ -n "$PLATFORM_ARG" ]]; then
+        echo "ERROR: Unexpected extra argument '$1' (platform already set to '$PLATFORM_ARG')." >&2
+        exit 1
+      fi
+      PLATFORM_ARG="$1"
+      shift
+      ;;
+  esac
+done
+
+# --- platform filter -----------------------------------------------------
 # Read by render_screens.py via the RENDER_PLATFORMS env var.
-PLATFORM_ARG="${1:-}"
 PLATFORM_LC="$(printf '%s' "$PLATFORM_ARG" | tr '[:upper:]' '[:lower:]')"
 case "$PLATFORM_LC" in
   "")
@@ -126,6 +188,12 @@ echo "Blender:    $BLENDER_EXE"
 echo "Blend file: $BLEND_FILE"
 echo "Script:     $SCRIPT_FILE"
 echo "Platforms:  $PLATFORM_LABEL"
+if [[ -n "${RENDER_OUTPUT_DIR:-}" ]]; then
+  echo "Output dir: $RENDER_OUTPUT_DIR  (override)"
+fi
+if [[ -n "${RENDER_OUTPUTS:-}" ]]; then
+  echo "Outputs:    $RENDER_OUTPUTS  (override)"
+fi
 echo
 
 if [[ ! -f "$BLEND_FILE" ]]; then
