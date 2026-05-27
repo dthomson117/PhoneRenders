@@ -20,17 +20,10 @@ venv/
 env/
 
 # --- Renders ---------------------------------------------------------------
-# Ignore everything inside renders/ EXCEPT the small set of sample images
-# that we commit on purpose to show what the pipeline produces.
-# Output is organised into per-pass subdirs: shadow/, no_shadow/, svg/.
-renders/**
-!renders/
-!renders/iOS/
-!renders/iOS/shadow/
-!renders/Android/
-!renders/Android/shadow/
-!renders/iOS/shadow/default_ios__*.png
-!renders/Android/shadow/default_android__*.png
+# The committed sample set under renders/ (default_ios__* and
+# default_android__* PNGs/SVGs) lives in-tree so the README has something
+# to show. Personal renders just go alongside them - they show up as
+# untracked and only get committed if you explicitly `git add` them.
 
 # --- Local-only artefacts --------------------------------------------------
 # Optional per-user override - drop a `render_settings.local.json` next to
