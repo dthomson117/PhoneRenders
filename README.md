@@ -125,16 +125,17 @@ set BLENDER_EXE=C:\path\to\blender.exe && render.bat
 ## Example output
 
 The repo ships with one default screenshot per platform and the six
-angles rendered for each:
+angles rendered for each, in all three output variants
+(`shadow` / `no_shadow` / `svg`):
 
-| Angle | iOS | Android |
-| --- | --- | --- |
-| `front`                  | <img src="renders/iOS/default_ios__front.png"                  alt="iOS front"                  width="320"> | <img src="renders/Android/default_android__front.png"                  alt="Android front"                  width="320"> |
-| `threequarter_left`      | <img src="renders/iOS/default_ios__threequarter_left.png"      alt="iOS three-quarter left"      width="320"> | <img src="renders/Android/default_android__threequarter_left.png"      alt="Android three-quarter left"      width="320"> |
-| `threequarter_right`     | <img src="renders/iOS/default_ios__threequarter_right.png"     alt="iOS three-quarter right"     width="320"> | <img src="renders/Android/default_android__threequarter_right.png"     alt="Android three-quarter right"     width="320"> |
-| `threequarter_left_top`  | <img src="renders/iOS/default_ios__threequarter_left_top.png"  alt="iOS three-quarter left top"  width="320"> | <img src="renders/Android/default_android__threequarter_left_top.png"  alt="Android three-quarter left top"  width="320"> |
-| `threequarter_right_top` | <img src="renders/iOS/default_ios__threequarter_right_top.png" alt="iOS three-quarter right top" width="320"> | <img src="renders/Android/default_android__threequarter_right_top.png" alt="Android three-quarter right top" width="320"> |
-| `hero_top`               | <img src="renders/iOS/default_ios__hero_top.png"               alt="iOS hero top"               width="320"> | <img src="renders/Android/default_android__hero_top.png"               alt="Android hero top"               width="320"> |
+| Angle | iOS shadow | iOS no shadow | iOS SVG | Android shadow | Android no shadow | Android SVG |
+| --- | --- | --- | --- | --- | --- | --- |
+| `front`                  | <img src="renders/iOS/shadow/default_ios__front.png"                  alt="iOS front (shadow)"                  width="180"> | <img src="renders/iOS/no_shadow/default_ios__front.png"                  alt="iOS front (no shadow)"                  width="180"> | <img src="renders/iOS/svg/default_ios__front.svg"                  alt="iOS front (svg)"                  width="180"> | <img src="renders/Android/shadow/default_android__front.png"                  alt="Android front (shadow)"                  width="180"> | <img src="renders/Android/no_shadow/default_android__front.png"                  alt="Android front (no shadow)"                  width="180"> | <img src="renders/Android/svg/default_android__front.svg"                  alt="Android front (svg)"                  width="180"> |
+| `threequarter_left`      | <img src="renders/iOS/shadow/default_ios__threequarter_left.png"      alt="iOS three-quarter left (shadow)"      width="180"> | <img src="renders/iOS/no_shadow/default_ios__threequarter_left.png"      alt="iOS three-quarter left (no shadow)"      width="180"> | <img src="renders/iOS/svg/default_ios__threequarter_left.svg"      alt="iOS three-quarter left (svg)"      width="180"> | <img src="renders/Android/shadow/default_android__threequarter_left.png"      alt="Android three-quarter left (shadow)"      width="180"> | <img src="renders/Android/no_shadow/default_android__threequarter_left.png"      alt="Android three-quarter left (no shadow)"      width="180"> | <img src="renders/Android/svg/default_android__threequarter_left.svg"      alt="Android three-quarter left (svg)"      width="180"> |
+| `threequarter_right`     | <img src="renders/iOS/shadow/default_ios__threequarter_right.png"     alt="iOS three-quarter right (shadow)"     width="180"> | <img src="renders/iOS/no_shadow/default_ios__threequarter_right.png"     alt="iOS three-quarter right (no shadow)"     width="180"> | <img src="renders/iOS/svg/default_ios__threequarter_right.svg"     alt="iOS three-quarter right (svg)"     width="180"> | <img src="renders/Android/shadow/default_android__threequarter_right.png"     alt="Android three-quarter right (shadow)"     width="180"> | <img src="renders/Android/no_shadow/default_android__threequarter_right.png"     alt="Android three-quarter right (no shadow)"     width="180"> | <img src="renders/Android/svg/default_android__threequarter_right.svg"     alt="Android three-quarter right (svg)"     width="180"> |
+| `threequarter_left_top`  | <img src="renders/iOS/shadow/default_ios__threequarter_left_top.png"  alt="iOS three-quarter left top (shadow)"  width="180"> | <img src="renders/iOS/no_shadow/default_ios__threequarter_left_top.png"  alt="iOS three-quarter left top (no shadow)"  width="180"> | <img src="renders/iOS/svg/default_ios__threequarter_left_top.svg"  alt="iOS three-quarter left top (svg)"  width="180"> | <img src="renders/Android/shadow/default_android__threequarter_left_top.png"  alt="Android three-quarter left top (shadow)"  width="180"> | <img src="renders/Android/no_shadow/default_android__threequarter_left_top.png"  alt="Android three-quarter left top (no shadow)"  width="180"> | <img src="renders/Android/svg/default_android__threequarter_left_top.svg"  alt="Android three-quarter left top (svg)"  width="180"> |
+| `threequarter_right_top` | <img src="renders/iOS/shadow/default_ios__threequarter_right_top.png" alt="iOS three-quarter right top (shadow)" width="180"> | <img src="renders/iOS/no_shadow/default_ios__threequarter_right_top.png" alt="iOS three-quarter right top (no shadow)" width="180"> | <img src="renders/iOS/svg/default_ios__threequarter_right_top.svg" alt="iOS three-quarter right top (svg)" width="180"> | <img src="renders/Android/shadow/default_android__threequarter_right_top.png" alt="Android three-quarter right top (shadow)" width="180"> | <img src="renders/Android/no_shadow/default_android__threequarter_right_top.png" alt="Android three-quarter right top (no shadow)" width="180"> | <img src="renders/Android/svg/default_android__threequarter_right_top.svg" alt="Android three-quarter right top (svg)" width="180"> |
+| `hero_top`               | <img src="renders/iOS/shadow/default_ios__hero_top.png"               alt="iOS hero top (shadow)"               width="180"> | <img src="renders/iOS/no_shadow/default_ios__hero_top.png"               alt="iOS hero top (no shadow)"               width="180"> | <img src="renders/iOS/svg/default_ios__hero_top.svg"               alt="iOS hero top (svg)"               width="180"> | <img src="renders/Android/shadow/default_android__hero_top.png"               alt="Android hero top (shadow)"               width="180"> | <img src="renders/Android/no_shadow/default_android__hero_top.png"               alt="Android hero top (no shadow)"               width="180"> | <img src="renders/Android/svg/default_android__hero_top.svg"               alt="Android hero top (svg)"               width="180"> |
 
 Default phones shipped in the `.blend`:
 
@@ -388,8 +389,14 @@ blender --background phones.blend --python render_screens.py
 │   ├── iOS/              # Drop your iOS screens here
 │   └── Android/          # Drop your Android screens here
 └── renders/
-    ├── iOS/              # Renders land here
+    ├── iOS/              # Renders land here, split by output variant
+    │   ├── shadow/       #   PNGs with shadow-catcher pass
+    │   ├── no_shadow/    #   PNGs with no shadow
+    │   └── svg/          #   Silhouette SVGs
     └── Android/
+        ├── shadow/
+        ├── no_shadow/
+        └── svg/
 ```
 
 ## Contributing
