@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from dataclasses import dataclass
 
 import bpy
@@ -260,6 +261,84 @@ def resolve_outputs(raw: dict, fallback: Outputs | None = None) -> Outputs:
     return fb
 
 
+OUTPUT_ALIASES = {
+    "png_with_shadow": "png_with_shadow",
+    "with_shadow":     "png_with_shadow",
+    "shadow":          "png_with_shadow",
+    "png_no_shadow":   "png_no_shadow",
+    "no_shadow":       "png_no_shadow",
+    "noshadow":        "png_no_shadow",
+    "flat":            "png_no_shadow",
+    "svg_no_shadow":   "svg_no_shadow",
+    "svg":             "svg_no_shadow",
+}
+
+
+def _parse_outputs_env(value: str) -> dict | None:
+    """Parse RENDER_OUTPUTS into a {png_with_shadow, png_no_shadow, svg_no_shadow} dict.
+
+    Accepts a comma- or whitespace-separated list. Listed outputs become True,
+    everything else False. ``all`` enables all three; ``none`` disables all three.
+    Returns ``None`` if the value is empty / nothing recognisable was found.
+    """
+    tokens = [t.strip().lower() for t in re.split(r"[,\s]+", value) if t.strip()]
+    if not tokens:
+        return None
+
+    result = {"png_with_shadow": False, "png_no_shadow": False, "svg_no_shadow": False}
+
+    if any(t == "all" for t in tokens):
+        return {k: True for k in result}
+    if tokens == ["none"]:
+        return result
+
+    unknown: list[str] = []
+    matched = False
+    for tok in tokens:
+        if tok in ("all", "none"):
+            continue
+        key = OUTPUT_ALIASES.get(tok)
+        if key is None:
+            unknown.append(tok)
+            continue
+        result[key] = True
+        matched = True
+
+    if unknown:
+        log(
+            f"[warn] RENDER_OUTPUTS contained unknown token(s): "
+            f"{', '.join(unknown)}; valid: "
+            f"png_with_shadow|with_shadow|shadow, "
+            f"png_no_shadow|no_shadow|noshadow|flat, "
+            f"svg_no_shadow|svg, all, none"
+        )
+
+    return result if matched else None
+
+
+def _apply_env_overrides(flat: dict) -> None:
+    """Apply CLI/env overrides on top of the loaded settings dict (in place)."""
+    out_dir = os.environ.get("RENDER_OUTPUT_DIR")
+    if out_dir:
+        log(f"[env] RENDER_OUTPUT_DIR override: output_dir={out_dir!r}")
+        flat["output_dir"] = out_dir
+
+    outputs_env = os.environ.get("RENDER_OUTPUTS")
+    if outputs_env is not None and outputs_env.strip():
+        parsed = _parse_outputs_env(outputs_env)
+        if parsed is not None:
+            enabled = [k for k, v in parsed.items() if v] or ["<none>"]
+            log(f"[env] RENDER_OUTPUTS override: {', '.join(enabled)}")
+            flat["outputs"] = parsed
+            # CLI wins over per-phone outputs / legacy shadow_catcher blocks too.
+            scenes = flat.get("scenes")
+            if isinstance(scenes, dict):
+                for scene_cfg in scenes.values():
+                    if isinstance(scene_cfg, dict):
+                        scene_cfg.pop("outputs", None)
+                        scene_cfg.pop("shadow_catcher", None)
+
+
 def _candidate_settings_paths(script_dir: str | None):
     paths = []
     env_path = os.environ.get("RENDER_SETTINGS")
@@ -472,5 +551,7 @@ def load_settings(script_dir: str | None = None) -> Settings:
         flat["scenes"] = file_scenes
     elif phones_dir and os.path.isdir(phones_dir):
         log(f"[phones] '{phones_dir}' exists but contains no .json files")
+
+    _apply_env_overrides(flat)
 
     return _settings_from_flat(flat)

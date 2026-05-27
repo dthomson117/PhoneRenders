@@ -1,4 +1,5 @@
 import os
+import tempfile
 
 import bpy
 from mathutils import Vector
@@ -30,7 +31,8 @@ def _build_passes(outputs: Outputs):
             "shadow_catcher_on": False,
             "save_png":          outputs.png_no_shadow,
             "save_svg":          outputs.svg_no_shadow,
-            "png_suffix":        "__noshadow",
+            "png_subdir":        "no_shadow",
+            "svg_subdir":        "svg",
         })
     if outputs.png_with_shadow:
         passes.append({
@@ -38,7 +40,8 @@ def _build_passes(outputs: Outputs):
             "shadow_catcher_on": True,
             "save_png":          True,
             "save_svg":          False,
-            "png_suffix":        "",
+            "png_subdir":        "shadow",
+            "svg_subdir":        None,
         })
     return passes
 
@@ -47,7 +50,21 @@ def _render_one_shot(scene, cam, key_light, phone_center, resolved, pass_cfg,
                      image_node, out_dir, safe_screen, angle_name, settings):
     scene.camera = cam
     base_name = f"{safe_screen}__{angle_name}"
-    png_path = os.path.join(out_dir, f"{base_name}{pass_cfg['png_suffix']}.png")
+    save_png = pass_cfg["save_png"]
+    save_svg = pass_cfg["save_svg"]
+
+    if save_png:
+        png_out_dir = os.path.join(out_dir, pass_cfg["png_subdir"])
+        os.makedirs(png_out_dir, exist_ok=True)
+        png_path = os.path.join(png_out_dir, f"{base_name}.png")
+        cleanup_png = False
+    else:
+        # SVG-only pass: render the intermediate PNG to a system temp file so
+        # the user-visible out_dir only ever contains the final SVG.
+        fd, png_path = tempfile.mkstemp(prefix=f"{base_name}_", suffix=".png")
+        os.close(fd)
+        cleanup_png = True
+
     scene.render.filepath = png_path
 
     if key_light is not None:
@@ -57,11 +74,20 @@ def _render_one_shot(scene, cam, key_light, phone_center, resolved, pass_cfg,
             shadow_azimuth_deg=resolved.key_light_shadow_azimuth_deg,
         )
     bpy.context.view_layer.update()
-    log(f"Rendering {png_path}")
+
+    svg_path = None
+    if save_svg:
+        svg_out_dir = os.path.join(out_dir, pass_cfg["svg_subdir"])
+        os.makedirs(svg_out_dir, exist_ok=True)
+        svg_path = os.path.join(svg_out_dir, f"{base_name}.svg")
+
+    if save_png:
+        log(f"Rendering {png_path}")
+    else:
+        log(f"Rendering {svg_path} (PNG via temp: {png_path})")
     bpy.ops.render.render(write_still=True)
 
-    if pass_cfg["save_svg"]:
-        svg_path = os.path.join(out_dir, f"{base_name}.svg")
+    if save_svg and svg_path is not None:
         try:
             generate_svg_from_png(
                 png_path, svg_path,
@@ -71,7 +97,7 @@ def _render_one_shot(scene, cam, key_light, phone_center, resolved, pass_cfg,
         except Exception as exc:
             log(f"[svg] failed to write {svg_path}: {exc}")
 
-    if not pass_cfg["save_png"]:
+    if cleanup_png:
         try:
             os.remove(png_path)
         except OSError as exc:

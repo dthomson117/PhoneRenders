@@ -81,6 +81,34 @@ cp ~/android-screens/*.png screenshots/Android/
 Both launchers accept an optional platform filter - `ios`, `android`, or
 `both` (default). Renders land in `renders/iOS/` and `renders/Android/`.
 
+The launchers also accept two optional flags so you can override
+`output_dir` and the `outputs` block without editing
+`render_settings.json`:
+
+| Flag                                  | Effect                                                                                                                                                                  |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `-o DIR`, `--output DIR`              | Override `output_dir`. Absolute paths work as-is; prefix with `//` to resolve relative to the `.blend` (Blender's convention). Bare relative paths resolve against the shell's current working directory. |
+| `--outputs LIST`                      | Comma-separated list of outputs to enable. Listed outputs are turned on, everything else off. Per-phone `outputs` overrides are ignored when this flag is set.          |
+
+`--outputs` tokens:
+
+- `shadow` (alias for `png_with_shadow`)
+- `no_shadow` (alias for `png_no_shadow`; `flat` also works)
+- `svg` (alias for `svg_no_shadow`)
+- `all` - enable all three
+- `none` - disable all three
+
+Examples:
+
+```bash
+./render.sh ios -o /tmp/preview --outputs shadow
+./render.sh --outputs svg,no_shadow android
+```
+
+```bat
+render.bat ios -o C:\tmp\preview --outputs shadow,svg
+```
+
 If the launchers can't auto-discover Blender (they check `BLENDER_EXE`,
 `PATH`, common install locations, and on Windows the
 `HKLM\Software\BlenderFoundation` registry key), point them at it
@@ -330,6 +358,8 @@ For each new phone:
 | `RENDER_SETTINGS` | Path to an alternative settings JSON. |
 | `RENDER_SAMPLES` | Overrides `samples` for a single run (handy for previews). |
 | `RENDER_PLATFORMS` | Comma-separated platform filter (e.g. `iOS`, `Android`). Set automatically by `render.bat` / `render.sh` when you pass `ios` / `android`. |
+| `RENDER_OUTPUT_DIR` | Overrides `output_dir`. Set automatically by `-o` / `--output` on the launchers. |
+| `RENDER_OUTPUTS` | Comma-separated list of outputs to enable (tokens: `shadow`, `no_shadow` / `flat`, `svg`, `all`, `none`). Set automatically by `--outputs` on the launchers. |
 | `BLENDER_EXE` | Skip the launcher's auto-discovery and use a specific Blender binary. |
 
 Example - low-sample preview pass with a custom settings file:
