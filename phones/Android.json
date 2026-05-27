@@ -1,0 +1,10 @@
+{
+    "phone_object":    "Google Pixel 9 Pro XL",
+    "screen_material": "GP9XL_Screen",
+    "screens_dir":     "//screenshots/Android/",
+    "screen_node_id":  "ScreenTextureAndroid",
+
+    "shadow_catcher_z_offset":      0.012,
+    "screen_emission_allow_glossy": false,
+    "key_light_angle_deg":          30.0
+}

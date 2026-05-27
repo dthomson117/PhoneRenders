@@ -25,13 +25,15 @@ Open an issue with:
 
 ## Adding a new phone model
 
-1. Add the model to a new (or existing) scene in `phones.blend`.
+1. Add the model to a new (or existing) scene in `phones.blend`. The
+   scene name is the phone's identifier (e.g. `iPadMini`).
 2. Make sure the screen face has a material with an Image Texture node.
    Name or label that node uniquely (e.g. `ScreenTextureiPadMini`).
-3. Register the scene in `render_settings.json` under `scenes`:
+3. Drop a `phones/<SceneName>.json` config file in - the filename stem
+   must match the Blender scene name:
 
    ```json
-   "iPadMini": {
+   {
      "phone_object":    "iPad mini",
      "screen_material": "iPadMini_Screen",
      "screens_dir":     "//screenshots/iPadMini/",
